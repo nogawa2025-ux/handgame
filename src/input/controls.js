@@ -12,7 +12,12 @@ export function stickVector(ox, oy, x, y, radius) {
 }
 
 /** Screen direction → court direction. Camera on +z side: right = +x, down = +z. */
-export function toCourt(sx, sy, mirror) {
+export function toCourt(sx, sy, mirror, view = null) {
+  if (view) {
+    // screen up = where the camera looks, screen right = its right-hand side
+    const fx = view.x, fz = view.z;
+    return { mx: fx * -sy - fz * sx, mz: fz * -sy + fx * sx };
+  }
   return mirror ? { mx: -sx, mz: -sy } : { mx: sx, mz: sy };
 }
 
@@ -75,6 +80,7 @@ export function createControls(root, opts = { mirror: false }) {
   const keys = new Set();
   const keyPressed = new Set(), keyReleased = new Set();
   let mirror = opts.mirror;
+  let view = null; // camera facing on the court, when the camera isn't the side-line one
   let pending = { pass: false, long: false, shootRelease: false };
 
   const homeBase = () => { base.style.left = ''; base.style.top = ''; knob.style.transform = ''; };
@@ -142,6 +148,8 @@ export function createControls(root, opts = { mirror: false }) {
 
   return {
     setMirror(m) { mirror = m; },
+    /** Map the stick relative to a camera looking along {x, z} (null: side-line camera). */
+    setView(v) { view = v; },
     setMode(mode) {
       root.querySelector('#btn-pass').textContent = mode === 'attack' ? 'パス' : '切替';
       root.querySelector('#btn-shoot').textContent = mode === 'attack' ? 'シュート' : 'カット';
@@ -154,7 +162,7 @@ export function createControls(root, opts = { mirror: false }) {
       const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       const ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
       if (kx || ky) { const l = Math.hypot(kx, ky); sx = kx / l; sy = ky / l; }
-      const { mx, mz } = toCourt(sx, sy, mirror);
+      const { mx, mz } = toCourt(sx, sy, mirror, view);
       const heldKey = (name) => Object.entries(KEYMAP).some(([k, v]) => v === name && keys.has(k));
       const input = {
         mx, mz, sx, sy, // sx/sy: raw screen stick (aiming in the shot view)

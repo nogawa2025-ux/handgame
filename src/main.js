@@ -116,6 +116,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
   return {
     frame(dt) {
       if (ended) return display;
+      controls.setView(cam.mode === 'broadcast' ? null : cam.forward); // the stick follows the camera
       const local = { ...controls.read(), easy: settings.easy };
       lastLocal = local;
       localQ.add(local);
