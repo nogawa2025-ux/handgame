@@ -88,9 +88,9 @@ export const C = Object.freeze({
   FACE_R: 2.6,             // face-off: a defender this close, squarely in front
   FACE_EXIT: 3.4,          // ...stays a face-off until he is this far / off the line
   FACE_RANGE: 13,          // only this close to goal
-  FACE_SLOWMO: 0.75,
   FACE_BREAK_HOLD: 0.2,    // hold the stick to a side this long = break that way
   FACE_FEINT_WINDOW: 0.2,  // reverse within this = feint
+  FACE_FLICK: 0.07,        // neutral → side within this = a flick (starts a move)
   // wing dive shot
   WING_Z: 4.5,             // |z| beyond this, close to goal = a wing position
   DIVE_RANGE: 9.5,

@@ -33,24 +33,16 @@ test('no face-off far from goal or without a human involved', () => {
   assert.equal(c.face, null, 'CPU vs CPU');
 });
 
-test('in a face-off the stick is relative to the attacker: right = right of the way to goal', () => {
-  const s = setup();
-  run(s, 1, idle());
-  // attacking +x: right-hand side looking at the goal is +z
-  run(s, 20, { ...idle(), sx: 1, sy: 0, mx: 0, mz: 0 });
-  assert.ok(s.players[1].z > 0.3, 'moved to +z: ' + s.players[1].z);
-});
-
 test('holding the stick to one side breaks that way; a mirroring defender reads it', () => {
   const s = setup();
   run(s, 1, idle());
   // the defender is already moving to the break side (+z)
-  const ev = run(s, 20, (i) => ({ ...idle(), sx: 1, sy: 0 }), { ...idle(), mx: 0, mz: 0 });
+  const ev = run(s, 20, (i) => ({ ...idle(), mz: 1 }), { ...idle(), mx: 0, mz: 0 });
   assert.ok(ev.includes('feint'), 'a break happened');
   const r = setup(); run(r, 1, idle());
   r.players[8].vz = 3; // mirroring: moving with the attacker
   const ev2 = [];
-  for (let i = 0; i < 20; i++) { r.players[8].vz = 3; r.players[8].vx = 0; step(r, [{ ...idle(), sx: 1, sy: 0 }, { ...idle() }], DT); ev2.push(...r.events); }
+  for (let i = 0; i < 20; i++) { r.players[8].vz = 3; r.players[8].vx = 0; step(r, [{ ...idle(), mz: 1 }, { ...idle() }], DT); ev2.push(...r.events); }
   assert.ok(ev2.includes('read'), 'read: ' + ev2.join(','));
 });
 
@@ -58,23 +50,19 @@ test('a quick flick one way then the other is a feint: the defender who followed
   const s = setup(); run(s, 1, idle());
   const ev = [];
   for (let i = 0; i < 24; i++) {
-    const sx = i < 6 ? -1 : 1; // left for 0.1s, then right
+    const mz = i < 6 ? -1 : 1; // one side for 0.1s, then the other
     if (i < 6) { s.players[8].vz = -3; s.players[8].vx = 0; } // defender bites on the first move
-    step(s, [{ ...idle(), sx, sy: 0 }, { ...idle() }], DT); ev.push(...s.events);
+    step(s, [{ ...idle(), mz }, { ...idle() }], DT); ev.push(...s.events);
   }
   assert.equal(ev.filter((e) => e === 'feint').length, 1, 'exactly one move: ' + ev.join(','));
   assert.ok(ev.includes('beat'), 'beat: ' + ev.join(','));
 });
 
-test('a human defender in a face-off is put on the attacker and steers relative to him', () => {
+test('a human defender in a face-off is put on the attacker', () => {
   const s = setup();
   s.controlled[1] = 10;
   step(s, [null, { ...idle() }], DT);
   assert.equal(s.controlled[1], 8, 'control goes to the marker');
-  const z0 = s.players[8].z;
-  // defender looks at the attacker (-x); his right-hand side is -z
-  for (let i = 0; i < 15; i++) step(s, [null, { ...idle(), sx: 1, sy: 0 }], DT);
-  assert.ok(s.players[8].z < z0 - 0.2, 'moved to his right (-z): ' + s.players[8].z);
 });
 
 test('wing shot: a dive into the goal area, released closer to goal', () => {

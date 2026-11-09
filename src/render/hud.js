@@ -54,11 +54,10 @@ export function createHud() {
       });
       passive.classList.toggle('hidden', !state.attack?.warned);
       drawMinimap(state, localTeam);
-      const duel = state.duel, face = !duel && state.phase === 'play' ? state.face : null;
-      document.body.classList.toggle('duel', !!(duel || face));
-      hint.classList.toggle('hidden', !(duel || face));
+      const duel = state.duel;
+      document.body.classList.toggle('duel', !!duel);
+      hint.classList.toggle('hidden', !duel);
       if (duel) hint.textContent = duel.team === localTeam ? '🎯 スティックで狙う → 離してシュート' : '🧤 キーパー：スティックで守る側を読む';
-      else if (face) hint.textContent = face.team === localTeam ? '⚔ 1対1：◀▶倒して抜く／素早く逆へ＝フェイント' : '⚔ 1対1：抜かれる側へ寄って止める（待つのもあり）';
       const c = state.shootCharge[localTeam];
       charge.classList.toggle('on', c > 0);
       fill.style.width = `${Math.round(c * 100)}%`;

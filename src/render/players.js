@@ -141,7 +141,7 @@ export async function loadPlayers(scene, players) {
         }
       });
       const c = state.players[state.controlled[localTeam]];
-      ring.visible = arrow.visible = !state.duel && !state.face; // markers would sit in front of the goal in the duel view
+      ring.visible = arrow.visible = !state.duel; // markers would sit in front of the goal in the duel view
       if (c) {
         ring.position.x = c.x; ring.position.z = c.z;
         arrow.position.set(c.x, 2.25 + Math.sin(t * 6) * 0.06, c.z);

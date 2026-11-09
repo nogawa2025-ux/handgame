@@ -24,7 +24,6 @@ export function encodeSnapshot(s, ack = 0) {
     pw: s.attack?.warned ? s.attack.team : -1,
     j: s.players.map((q) => r2(q.jump ?? 0)),
     du: s.duel ? [s.duel.team, s.duel.shooter] : null,
-    fo: s.face ? [s.face.team, s.face.att, s.face.def] : null,
     dv: s.players.reduce((m, q, i) => (q.dive ? m | (1 << i) : m), 0),
     gl: [0, 7].flatMap((i) => [r2(s.players[i].leanZ ?? 0), r2(s.players[i].leanH ?? 0)]),
     au: s.players.reduce((m, q, i) => (q.armsUp ? m | (1 << i) : m), 0),
@@ -47,7 +46,6 @@ export function decodeSnapshot(o, into = createMatchState()) {
   into.overtime = !!o.ot; into.winner = o.w; into.ack = o.ack ?? 0;
   if (o.st) into.players.forEach((q, i) => { q.stamina = o.st[i]; });
   into.duel = o.du ? { team: o.du[0], shooter: o.du[1] } : null;
-  into.face = o.fo ? { team: o.fo[0], att: o.fo[1], def: o.fo[2] } : null;
   if (o.dv !== undefined) into.players.forEach((q, i) => { q.dive = !!(o.dv & (1 << i)); });
   if (o.gl) [0, 7].forEach((id, k) => { into.players[id].leanZ = o.gl[k * 2]; into.players[id].leanH = o.gl[k * 2 + 1]; });
   if (o.au !== undefined) into.players.forEach((q, i) => { q.armsUp = !!(o.au & (1 << i)); });
@@ -111,8 +109,8 @@ export class Predictor {
   apply(state, latest, team, input, dt, seq = 0) {
     const id = state.controlled[team];
     const auth = latest?.players[id];
-    // no prediction during a shot duel or 1-on-1 (the host maps the stick differently there)
-    if (!auth || state.phase !== 'play' || latest.duel || latest.face) { this.p = null; this.hist = []; return state; }
+    // no prediction during a shot duel (the stick aims / drives the keeper there)
+    if (!auth || state.phase !== 'play' || latest.duel) { this.p = null; this.hist = []; return state; }
     if (id !== this.id || !this.p) { this.id = id; this.p = { ...auth }; this.hist = []; }
     const p = this.p;
     // reconcile once per new acknowledgement

@@ -1,7 +1,6 @@
 // 1-on-1 face-off: a defender squares up to the ball carrier near goal. While it
-// lasts the stick works relative to the duel (left/right = sides of the attacker's
-// way to goal) and the attacker picks a move: hold a side = break that way, flick
-// one way then quickly the other = feint. stepFeint() resolves it against how the
+// lasts the attacker picks a move with the stick (sideways = across his way to
+// goal): hold a side = break that way, flick one way then quickly the other = feint. stepFeint() resolves it against how the
 // defender is moving (followed / waited / read).
 import { C } from './constants.js';
 import { goalX } from './geometry.js';
@@ -40,15 +39,14 @@ export function faceTick(s, inputs) {
   if (!same) s.faceMove = [null, null];
 }
 
-/** Stick → world move for a player in the face-off (null if `me` isn't in it). */
+/** The attacker's stick split into his own frame: lat > 0 = right of his way to goal. */
 export function faceStick(s, me, inp) {
   const f = s.face;
-  if (!f || (me.id !== f.att && me.id !== f.def) || inp.sx == null) return null; // no raw stick: world moves
-  const att = s.players[f.att], def = s.players[f.def];
-  // attacker looks at the goal, defender looks at the attacker
-  const [fx, fz] = me.id === f.att ? toGoal(att) : unit(att.x - def.x, att.z - def.z);
-  const fw = -(inp.sy ?? 0), lat = inp.sx ?? 0;
-  return { mx: fx * fw - fz * lat, mz: fz * fw + fx * lat, lat, fx, fz };
+  if (!f || me.id !== f.att) return null;
+  const [fx, fz] = toGoal(s.players[f.att]);
+  const mag = Math.hypot(inp.mx, inp.mz);
+  const lat = mag > 0.3 ? (inp.mx * -fz + inp.mz * fx) / Math.max(1, mag) : 0;
+  return { lat, fx, fz };
 }
 
 /**
@@ -67,11 +65,24 @@ export function faceMoves(s, t, me, st, dt) {
     if (feint) s.events.push('face-feint');
     return true;
   };
+  // only a flick counts (neutral → a side quickly): plain steering past a defender doesn't
   if (m?.done) { if (!side) s.faceMove[t] = null; return false; }
-  if (!m) { if (side) s.faceMove[t] = { side, t: 0 }; return false; }
+  if (!m) { if (side && (s.latLow?.[t] ?? 9) <= C.FACE_FLICK) s.faceMove[t] = { side, t: 0 }; return false; }
   m.t += dt;
   if (side === -m.side && m.t < C.FACE_FEINT_WINDOW) return go(side, true); // quick reversal: feint
   if (side === m.side && m.t >= C.FACE_BREAK_HOLD) return go(side, false);   // held: break that way
   if (!side) s.faceMove[t] = null;                                          // let go: nothing
   return false;
+}
+
+/**
+ * Every tick for the ball carrier: how long the stick has been off the sideways
+ * neutral (lat = across the way to goal). A move needs a quick neutral → side flick.
+ */
+export function trackLat(s, t, me, inp, dt) {
+  s.latLow ??= [9, 9];
+  const [fx, fz] = toGoal(me);
+  const mag = Math.hypot(inp.mx, inp.mz);
+  const lat = mag > 0.3 ? (inp.mx * -fz + inp.mz * fx) / Math.max(1, mag) : 0;
+  s.latLow[t] = Math.abs(lat) < 0.3 ? 0 : s.latLow[t] + dt;
 }
