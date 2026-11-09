@@ -4,7 +4,7 @@ import { gkId } from '../sim/state.js';
 
 const attackDir = (team) => (team === 0 ? 1 : -1);
 // duel framing (metres)
-export const VIEW = { BEHIND_BACK: 5.0, BEHIND_UP: 3.0, BEHIND_AHEAD: 3.5, BEHIND_YAW: 0.2, CLOSE_DIST: 8, CLOSE_UP: 0.62, KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
+export const VIEW = { BEHIND_BACK: 9.0, BEHIND_UP: 6.5, BEHIND_AHEAD: 6.0, BEHIND_YAW: 0.2, CLOSE_DIST: 8, CLOSE_UP: 0.62, KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
 
 /**
  * Close-up broadcast-style camera on the side line. When `mirror` is true the camera sits
