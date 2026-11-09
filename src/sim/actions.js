@@ -5,6 +5,13 @@ import { giveBall, teamIds } from './state.js';
 const ACCEL = 10; // 1/s, velocity smoothing rate
 
 export function movePlayer(p, dirX, dirZ, dash, dribbling, dt, maxSpeed = C.RUN) {
+  if (p.jump > 0) {
+    // airborne: no steering, momentum carries (a jump shot may fly over the goal-area line)
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    p.x = Math.max(-C.COURT_HALF_X + 0.3, Math.min(C.COURT_HALF_X - 0.3, p.x));
+    p.z = Math.max(-C.COURT_HALF_Z + 0.3, Math.min(C.COURT_HALF_Z - 0.3, p.z));
+    return;
+  }
   let len = Math.hypot(dirX, dirZ);
   if (len > 1) { dirX /= len; dirZ /= len; len = 1; }
   const st = p.stamina ?? 1;
@@ -82,11 +89,11 @@ export function pickLongTarget(s, fromId) {
   return best;
 }
 
-function launch(s, from, tx, tz, ty, speed) {
+function launch(s, from, tx, tz, ty, speed, fromY = 1.1) {
   const b = s.ball;
   b.holder = null; b.holdTime = 0; b.lastTeam = from.team;
   b.thrower = from.id; b.throwTimer = 0.25; b.flightAge = 0;
-  b.x = from.x + Math.cos(from.facing) * 0.4; b.z = from.z + Math.sin(from.facing) * 0.4; b.y = 1.1;
+  b.x = from.x + Math.cos(from.facing) * 0.4; b.z = from.z + Math.sin(from.facing) * 0.4; b.y = fromY;
   const dx = tx - b.x, dz = tz - b.z;
   const dist = Math.max(0.1, Math.hypot(dx, dz));
   const t = dist / speed;
@@ -112,7 +119,15 @@ export function shoot(s, fromId, aimZ, charge) {
   const tired = 0.85 + 0.15 * (from.stamina ?? 1);
   const speed = (C.SHOT_MIN + (C.SHOT_MAX - C.SHOT_MIN) * Math.max(0, Math.min(1, charge))) * tired;
   from.facing = Math.atan2(tz - from.z, gx - from.x);
-  launch(s, from, gx, tz, 0.9 + 0.6 * Math.abs(aimZ), speed);
+  // close in: take off and throw from the air, carried forward by the run-up
+  const jump = from.role === 'field' && Math.hypot(goalX(from.team) - from.x, from.z) < C.JUMP_SHOT_RANGE;
+  if (jump) {
+    const d = from.team === 0 ? 1 : -1;
+    from.jump = C.JUMP_TIME;
+    from.vx = d * Math.max(2.2, from.vx * d); from.vz *= 0.6;
+  }
+  launch(s, from, gx, tz, 0.9 + 0.6 * Math.abs(aimZ), speed, jump ? C.JUMP_RELEASE_Y : 1.1);
+  s.penalty = null;
   const b = s.ball;
   b.passTarget = null; b.shot = true; b.shotTeam = from.team; b.shotAge = 0; b.blockChecked = [];
   // a keeper already leaning the wrong way stays committed for this shot
@@ -156,9 +171,38 @@ export function stealChance(s, st, h, bonus = 0) {
   if (Math.hypot(dx, dz) > range) return 0;
   if (angleBetween(Math.cos(st.facing), Math.sin(st.facing), dx, dz) > (70 * Math.PI) / 180) return 0;
   if (dribbling) return C.STEAL_CHANCE_DRIBBLE;
-  // where is the defender relative to where the holder faces?
-  const behind = angleBetween(Math.cos(h.facing), Math.sin(h.facing), -dx, -dz) > (120 * Math.PI) / 180;
-  return behind ? C.STEAL_CHANCE_BEHIND : C.STEAL_CHANCE;
+  return fromBehind(st, h) ? C.STEAL_CHANCE_BEHIND : C.STEAL_CHANCE;
+}
+
+/** Is defender `st` behind the holder (relative to where the holder faces)? */
+export function fromBehind(st, h) {
+  return angleBetween(Math.cos(h.facing), Math.sin(h.facing), st.x - h.x, st.z - h.z) > (120 * Math.PI) / 180;
+}
+
+/** Award a 7m throw to the holder: shooter on the 7m line, everyone else behind the 9m line. */
+export function sevenMeter(s, shooterId) {
+  const sh = s.players[shooterId];
+  const team = sh.team, d = team === 0 ? 1 : -1, gx = goalX(team);
+  for (const p of s.players) {
+    p.vx = p.vz = 0; p.stun = 0; p.jump = 0;
+    if (p.role === 'gk') {
+      if (p.team !== team) { p.x = gx - d * 1.0; p.z = 0; }
+      continue;
+    }
+    const r = Math.hypot(gx - p.x, p.z);
+    if (r < 9.8) {
+      const a = Math.atan2(p.z, p.x - gx);
+      p.x = gx + Math.cos(a) * 9.8; p.z = Math.sin(a) * 9.8;
+      if ((p.x - gx) * d > 0) p.x = gx - d * 9.8; // never behind the goal line
+    }
+  }
+  sh.x = gx - d * 7; sh.z = 0; sh.facing = d === 1 ? 0 : Math.PI;
+  giveBall(s, shooterId);
+  s.controlled[team] = shooterId;
+  s.penalty = { team, time: 0 };
+  s.shootCharge = [0, 0];
+  s.phase = 'restart'; s.phaseTimer = C.RESTART_PAUSE * 1.5;
+  s.events.push('seven:' + team);
 }
 
 /** A cut attempt. A miss costs a cooldown and leaves the defender briefly wrong-footed. */
@@ -169,6 +213,11 @@ export function trySteal(s, stealerId, bonus = 0, r = roll(s, stealerId + 31)) {
   if (h.team === st.team || h.role !== 'field') return false;
   const chance = stealChance(s, st, h, bonus);
   st.stealCd = C.STEAL_COOLDOWN;
+  // hacking at a shooter from behind inside the 9m line kills a clear chance: 7m throw
+  if (chance > 0 && fromBehind(st, h) && Math.hypot(goalX(h.team) - h.x, h.z) < C.FREE_THROW_R && b.holdTime <= C.HOLD_LIMIT) {
+    sevenMeter(s, h.id);
+    return false;
+  }
   if (chance > 0 && r < chance) { giveBall(s, stealerId); s.events.push('steal'); return true; }
   if (chance > 0) { st.stun = C.STEAL_MISS_STUN; st.vx *= 0.3; st.vz *= 0.3; }
   return false;

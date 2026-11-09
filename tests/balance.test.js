@@ -117,3 +117,66 @@ test('easy: defence switches to the nearest player and cuts when running at the 
   assert.equal(s.controlled[0] === 2 || s.ball.holder === 2, true, 'switched to the nearest defender');
   assert.ok(tries > 0 || s.ball.holder === 2, 'a cut was attempted');
 });
+
+test('close-range shots are jump shots: the shooter takes off and may fly over the 6m line', () => {
+  const s = createMatchState(); scatter(s); s.phase = 'play';
+  Object.assign(s.players[1], { x: 13.5, z: 0, facing: 0, vx: 5, vz: 0 }); giveBall(s, 1); s.controlled[0] = 1;
+  shoot(s, 1, 1, 1);
+  assert.ok(s.players[1].jump > 0, 'airborne');
+  assert.ok(s.ball.y > 1.5, 'released high');
+  let maxX = 0;
+  for (let i = 0; i < 40; i++) { step(s, [idle(), idle()], DT); maxX = Math.max(maxX, s.players[1].x); }
+  assert.ok(maxX > 14, 'flew over the line');
+  assert.equal(s.players[1].jump, 0, 'landed');
+  assert.ok(Math.hypot(20 - s.players[1].x, s.players[1].z) >= C.GOAL_AREA_R - 1e-6, 'left the goal area after landing');
+});
+
+test('a cut from behind on a shooter inside 9m gives a 7m throw', () => {
+  const s = createMatchState(); scatter(s); s.phase = 'play';
+  Object.assign(s.players[1], { x: 12.5, z: 0, facing: 0 }); giveBall(s, 1);
+  Object.assign(s.players[8], { x: 11.6, z: 0, facing: 0, stealCd: 0, stun: 0 }); // behind the shooter
+  assert.equal(trySteal(s, 8, 0, 0), false);
+  assert.ok(s.events.includes('seven:0'));
+  assert.equal(s.ball.holder, 1);
+  assert.equal(s.players[1].x, 13);
+  for (const p of s.players) if (p.role === 'field' && p.id !== 1) assert.ok(Math.hypot(20 - p.x, p.z) >= 9.7, `#${p.id} behind 9m`);
+});
+
+test('7m throw: the thrower cannot walk in and must shoot within the limit', () => {
+  const s = createMatchState(); scatter(s); s.phase = 'play';
+  Object.assign(s.players[1], { x: 12.5, z: 0, facing: 0 }); giveBall(s, 1); s.controlled[0] = 1;
+  Object.assign(s.players[8], { x: 11.6, z: 0, facing: 0, stealCd: 0, stun: 0 });
+  trySteal(s, 8, 0, 0);
+  let shot = false;
+  for (let i = 0; i < 60 * (C.SEVEN_LIMIT + 3) && !shot; i++) {
+    step(s, [{ ...idle(), mx: 1 }, idle()], DT);
+    shot = s.events.includes('shot');
+    if (!shot && s.phase === 'play') assert.ok(Math.abs(s.players[1].x - 13) < 0.01, 'thrower stays on the 7m line');
+  }
+  assert.ok(shot, 'forced shot');
+  assert.equal(s.penalty, null);
+});
+
+test('CPU builds up: several passes before the first shot when the defence is set', () => {
+  let passes = 0, n = 0;
+  for (const t0 of [300, 299.3, 298.6]) {
+    const s = createMatchState(); s.time = t0;
+    let p = 0;
+    for (let i = 0; i < 60 * 60 && s.phase !== 'ended'; i++) {
+      step(s, [null, null], DT);
+      if (s.events.includes('pass')) p++;
+      if (s.events.includes('shot')) { passes += p; n++; p = 0; }
+      if (s.events.some((e) => e === 'steal' || e === 'intercept' || e.startsWith('goal'))) p = 0;
+    }
+  }
+  assert.ok(passes / n >= 3, `passes before a shot ${passes / n}`);
+});
+
+test('easy defence never cuts from behind (no free 7m throws)', () => {
+  const s = createMatchState(); scatter(s); s.phase = 'play';
+  Object.assign(s.players[8], { x: -12.5, z: 0, facing: Math.PI }); giveBall(s, 8);
+  Object.assign(s.players[2], { x: -11.6, z: 0, facing: Math.PI, stealCd: 0, stun: 0 });
+  s.controlled[0] = 2;
+  for (let i = 0; i < 5; i++) step(s, [{ ...idle(), easy: true, mx: -1 }, null], DT);
+  assert.ok(!s.events.includes('seven:1') && s.penalty == null);
+});

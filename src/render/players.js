@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { C } from '../sim/constants.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
@@ -83,12 +84,13 @@ export async function loadPlayers(scene, players) {
       t += dt;
       state.players.forEach((p, i) => {
         const v = views[i];
-        v.root.position.set(p.x, 0, p.z);
+        const jt = p.jump > 0 ? 1 - p.jump / C.JUMP_TIME : 0; // 0→1 through the jump
+        v.root.position.set(p.x, p.jump > 0 ? 4 * C.JUMP_H * jt * (1 - jt) : 0, p.z);
         const target = yaw(p.facing);
         let diff = target - v.root.rotation.y;
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         v.root.rotation.y += diff * Math.min(1, dt * 14);
-        if (!v.mixer) { v.root.position.y = p.anim === 'run' ? Math.abs(Math.sin(t * 12)) * 0.08 : 0; return; }
+        if (!v.mixer) { if (!(p.jump > 0)) v.root.position.y = p.anim === 'run' ? Math.abs(Math.sin(t * 12)) * 0.08 : 0; return; }
         const speed = Math.hypot(p.vx, p.vz);
         const want = { idle: speed < 0.6 ? 1 : 0, walk: speed >= 0.6 && speed < 3 ? 1 : 0, run: speed >= 3 ? 1 : 0 };
         for (const k of ['idle', 'walk', 'run']) {

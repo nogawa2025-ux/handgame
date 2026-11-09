@@ -51,7 +51,25 @@ function carrier(s, p, dt) {
     return Math.hypot(p.x + ax * u - q.x, p.z + az * u - q.z) > 0.9;
   });
   const hurry = s.attack?.warned && s.attack.team === p.team;
-  if ((distGoal < 9.6 && b.holdTime > 0.35 && (laneOpen || b.holdTime > 2.2)) || (hurry && distGoal < 12 && b.holdTime > 0.2)) {
+  // 7m throw: settle, then shoot
+  if (s.penalty && s.penalty.team === p.team) {
+    if (s.penalty.time > 0.8) {
+      const gk = s.players[gkId(1 - p.team)];
+      const r = roll(s, p.id + 5);
+      const side = gk.z > 0.1 ? -1 : gk.z < -0.1 ? 1 : (r < 0.5 ? -1 : 1);
+      shoot(s, p.id, side * (0.75 + 0.25 * r), 0.8 + 0.2 * r);
+    }
+    return;
+  }
+  // real handball: pass it around the 9m line first, unless the defence isn't set (fast break)
+  const a = s.attack;
+  const attackTime = a && a.team === p.team ? a.time : 0;
+  let defendersBack = 0;
+  for (const q of s.players) if (q.team !== p.team && q.role === 'field' && (q.x - p.x) * d > 0) defendersBack++;
+  const ready = defendersBack <= 2 || attackTime > (a?.build ?? C.BUILD_UP_MIN) || hurry;
+  const wideOpen = laneOpen && threat > 2.6;
+  if ((distGoal < 9.6 && b.holdTime > 0.35 && ((ready && (laneOpen || b.holdTime > 2.2)) || (wideOpen && b.holdTime > 0.6)))
+    || (hurry && distGoal < 12 && b.holdTime > 0.2)) {
     const gk = s.players[gkId(1 - p.team)];
     const aim = gk.z > 0 ? -1 : gk.z < 0 ? 1 : (p.z >= 0 ? -1 : 1);
     // vary placement and power like a real shooter (deterministic, from the clock)
@@ -71,13 +89,18 @@ function carrier(s, p, dt) {
       return;
     }
   }
-  if ((threat < 1.7 && b.holdTime > 0.5) || b.holdTime > 2.6) {
+  if ((threat < 1.7 && b.holdTime > 0.5) || b.holdTime > (ready ? 2.6 : 1.1)) {
     const best = bestPassTarget(s, p.id);
     if (best !== null) { throwBall(s, p.id, best, C.PASS_SPEED); return; }
   }
-  // drive toward a shooting spot, drifting away from the nearest defender
+  if (!ready) {
+    // circulate: hold position just outside the 9m line, facing the goal
+    moveTo(p, gx - d * Math.max(10, Math.min(13, Math.abs(gx - p.x))), p.z, dt, s.ball.x * d < 0, 0.6);
+    return;
+  }
+  // cut in toward a shooting spot, drifting toward the middle
   const tz = p.z * 0.6;
-  moveTo(p, gx - d * 8.8, tz, dt, s.ball.x * d < 0);
+  moveTo(p, gx - d * 8.3, tz, dt, true);
 }
 
 function keeper(s, team, dt, cpu) {
@@ -106,7 +129,7 @@ function keeper(s, team, dt, cpu) {
       const shuffle = Math.max(0, b.shotAge - 0.7) * C.GK_SPEED;
       const cap = (wrongSide ? 0.45 : C.GK_REACH) + shuffle;
       // a bit of luck either way: some corners get a fingertip, some soft ones squeeze in
-      const luck = (roll(s, 7 + team) - 0.4) * C.GK_LUCK;
+      const luck = (roll(s, 7 + team) - 0.5) * C.GK_LUCK;
       const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE + shuffle + luck);
       if (Math.abs(b.z - gk.z) <= reach) {
         giveBall(s, gk.id);
@@ -176,7 +199,7 @@ export function aiTick(s, team, dt, cpuControlsAll) {
     if (id === chaser) { moveTo(p, b.x, b.z, dt, true); return; }
     if (attacking) {
       const [ax, az] = ATTACK_SPOTS[i];
-      const tz = az + b.z * 0.15;
+      const tz = az + b.z * 0.15 + Math.sin(s.time * 0.9 + i * 1.7) * 0.9;
       const behindBall = (b.x * d) < 0; // ball in own half → fast break, sprint
       moveTo(p, ax * d, tz, dt, behindBall && i < 2);
       return;

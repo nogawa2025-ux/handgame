@@ -22,6 +22,7 @@ export function encodeSnapshot(s, ack = 0) {
     nm: s.players.map((q) => q.num),
     bn: s.bench.map((b) => b.map((x) => [x.num, r2(x.stamina)])),
     pw: s.attack?.warned ? s.attack.team : -1,
+    j: s.players.map((q) => r2(q.jump ?? 0)),
   };
 }
 
@@ -39,6 +40,7 @@ export function decodeSnapshot(o, into = createMatchState()) {
   into.score = o.sc.slice(); into.controlled = o.c.slice(); into.shootCharge = o.ch.slice();
   into.overtime = !!o.ot; into.winner = o.w; into.ack = o.ack ?? 0;
   if (o.st) into.players.forEach((q, i) => { q.stamina = o.st[i]; });
+  if (o.j) into.players.forEach((q, i) => { q.jump = o.j[i]; });
   if (o.nm) into.players.forEach((q, i) => { q.num = o.nm[i]; });
   into.attack = { team: o.pw ?? -1, time: 0, warned: (o.pw ?? -1) !== -1 };
   if (o.bn) into.bench = o.bn.map((b) => b.map(([num, stamina]) => ({ num, stamina })));

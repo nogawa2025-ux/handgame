@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea } from './geometry.js';
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
-import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock, bestPassTarget, stealChance } from './actions.js';
+import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock, bestPassTarget, stealChance, fromBehind, roll } from './actions.js';
 import { aiTick } from './ai.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
@@ -24,7 +24,7 @@ export function step(s, inputs, dt) {
   if (s.phase === 'countdown' || s.phase === 'restart' || s.phase === 'goal') {
     s.phaseTimer -= dt;
     if (s.phase === 'goal') ballPhysics(s, dt, false);
-    for (const p of s.players) { p.vx *= 0.9; p.vz *= 0.9; animate(p, dt); }
+    for (const p of s.players) { p.vx *= 0.9; p.vz *= 0.9; land(p, dt); animate(p, dt); }
     if (s.phaseTimer <= 0) {
       if (s.phase === 'goal') {
         resetForThrowOff(s, s.concede);
@@ -46,6 +46,7 @@ export function step(s, inputs, dt) {
     }
   }
   const prevTeam = possessionTeam(s);
+  sevenMeterTick(s, inputs, dt);
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
   for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);
   for (const p of s.players) {
@@ -53,6 +54,7 @@ export function step(s, inputs, dt) {
     p.stun = Math.max(0, (p.stun ?? 0) - dt);
     p.fooledCd = Math.max(0, (p.fooledCd ?? 0) - dt);
     p.offBalance = Math.max(0, (p.offBalance ?? 0) - dt);
+    land(p, dt);
     animate(p, dt);
   }
 
@@ -91,7 +93,10 @@ export function step(s, inputs, dt) {
 export function passivePlay(s, dt) {
   const a = s.attack;
   const team = possessionTeam(s);
-  if (team !== a.team || s.events.includes('shot')) { a.team = team; a.time = 0; a.warned = false; return false; }
+  if (team !== a.team || s.events.includes('shot')) {
+    if (team !== a.team) a.build = C.BUILD_UP_MIN + C.BUILD_UP_RAND * roll(s, 3);
+    a.team = team; a.time = 0; a.warned = false; return false;
+  }
   a.time += dt;
   if (!a.warned && a.time >= C.PASSIVE_WARN) { a.warned = true; s.events.push('passive-warn:' + team); }
   if (a.time < C.PASSIVE_LIMIT) return false;
@@ -136,12 +141,14 @@ function humanTick(s, t, inp, dt) {
   if (prev) prev.age += dt;
   if (mag > 0.6) {
     const nx = inp.mx / mag, nz = inp.mz / mag;
-    if (holding && me.role === 'field' && !inp.shootHeld && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
+    if (holding && me.role === 'field' && !inp.shootHeld && !s.penalty && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
       stepFeint(s, me.id, nx, nz);
     }
     s.lastStick[t] = { x: nx, z: nz, age: 0 };
   }
-  if (me.stun > 0) movePlayer(me, 0, 0, false, false, dt);
+  const sevenThrower = s.penalty && holding;
+  if (sevenThrower) inp = { ...inp, mx: 0, mz: inp.easy ? 0 : inp.mz, pass: false, long: false, dash: false };
+  if (me.stun > 0 || sevenThrower) movePlayer(me, 0, 0, false, false, dt);
   else movePlayer(me, inp.mx, inp.mz, inp.dash, holding && b.holdTime > C.HOLD_LIMIT, dt);
 
   if (b.holder !== null && b.holder === gkId(t)) {
@@ -188,6 +195,26 @@ function humanTick(s, t, inp, dt) {
   s.prevShootHeld[t] = !!inp.shootHeld;
 }
 
+/**
+ * 7m throw in progress: the thrower stays put and may only shoot; everyone else
+ * waits behind the 9m line until the ball is thrown (or the time limit forces the shot).
+ */
+function sevenMeterTick(s, inputs, dt) {
+  const pen = s.penalty;
+  if (!pen) return;
+  const b = s.ball;
+  if (b.holder === null || s.players[b.holder].team !== pen.team) { s.penalty = null; return; }
+  pen.time += dt;
+  for (const p of s.players) if (p.id !== b.holder && p.role === 'field') { p.stun = Math.max(p.stun, dt * 2); p.vx = p.vz = 0; }
+  const sh = s.players[b.holder];
+  sh.vx = sh.vz = 0;
+  if (pen.time > C.SEVEN_LIMIT) {
+    const inp = inputs[pen.team];
+    shoot(s, sh.id, inp?.easy || !inp ? (s.players[pen.team === 0 ? 7 : 0].z > 0 ? -0.95 : 0.95) : inp.mz, Math.max(0.6, s.shootCharge[pen.team]));
+    s.shootCharge[pen.team] = 0;
+  }
+}
+
 /** Easy defence: keep control on the defender nearest the ball (with a little hysteresis). */
 function autoSwitch(s, t) {
   const cur = s.players[s.controlled[t]];
@@ -205,6 +232,7 @@ function autoCut(s, t, me, inp) {
   if (h.team === t) return;
   const dx = h.x - me.x, dz = h.z - me.z, l = Math.hypot(dx, dz), m = Math.hypot(inp.mx, inp.mz);
   if (m < 0.3 || (inp.mx * dx + inp.mz * dz) / (m * l || 1) < 0.5) return;
+  if (fromBehind(me, h)) return; // never hack from behind (that would give away a 7m throw)
   if (stealChance(s, me, h, s.stealBonus[t]) > 0) trySteal(s, me.id, s.stealBonus[t]);
 }
 
@@ -312,6 +340,13 @@ function endOfTime(s) {
   s.phase = 'ended';
   s.winner = s.score[0] > s.score[1] ? 0 : s.score[1] > s.score[0] ? 1 : 'draw';
   s.events.push('end');
+}
+
+/** Count down a jump; on landing, step back out of the goal area. */
+function land(p, dt) {
+  if (!(p.jump > 0)) return;
+  p.jump = Math.max(0, p.jump - dt);
+  if (p.jump === 0 && p.role === 'field') { clampOutOfGoalArea(p); p.vx *= 0.3; p.vz *= 0.3; }
 }
 
 function animate(p, dt) {

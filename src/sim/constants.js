@@ -63,6 +63,16 @@ export const C = Object.freeze({
   PASSIVE_WARN: 15,
   PASSIVE_LIMIT: 22,
   CPU_SUB_COOLDOWN: 15,
+  // jump shot
+  JUMP_TIME: 0.55,
+  JUMP_H: 0.6,
+  JUMP_SHOT_RANGE: 12,     // shots closer than this are jump shots
+  JUMP_RELEASE_Y: 1.9,
+  // CPU attack build-up: pass around the 9m line for this long (+ random) before cutting in
+  BUILD_UP_MIN: 3,
+  BUILD_UP_RAND: 5,
+  // 7m throw
+  SEVEN_LIMIT: 5,          // the thrower must shoot within this many seconds
   // かんたん操作 (assist)
   EASY_MIN_CHARGE: 0.75,   // a quick tap still shoots hard
   EASY_SWITCH_MARGIN: 1.5, // switch defender when another is this much closer to the ball

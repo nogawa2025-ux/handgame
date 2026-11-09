@@ -137,6 +137,12 @@ html, body {
 }
 @keyframes blink { 50% { opacity: .55; } }
 
+/* minimap: whole court at a glance, bottom centre between the stick and the buttons */
+#minimap {
+  position: absolute; left: 50%; bottom: calc(8px + var(--safe-b)); transform: translateX(-50%);
+  width: 132px; height: 68px; border-radius: 6px; background: rgba(10, 18, 30, .7); border: 1px solid rgba(255,255,255,.35);
+}
+
 /* tutorial */
 body.tut #scoreboard, body.tut #passive { display: none; }
 #tutorial {

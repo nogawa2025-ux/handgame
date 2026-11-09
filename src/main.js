@@ -81,6 +81,10 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
       else if (e === 'steal' || e === 'intercept') { /* subtle: no banner */ }
       else if (e === 'overtime') hud.flash('延長戦！', true, 2);
       else if (e === 'block') hud.flash('ブロック！', false, 0.8, true);
+      else if (e.startsWith('seven:')) {
+        const mine = Number(e.slice(6)) === localTeam;
+        hud.flash(mine ? '7mスロー！（後ろからのファウル）' : '7mスロー（相手）：後ろから行くとファウル', mine, 2, true);
+      }
       else if (e.startsWith('passive-warn:')) {
         const mine = Number(e.slice(13)) === localTeam;
         hud.flash(mine ? 'パッシブ警告：早くシュート！' : '相手にパッシブ警告', !mine, 1.4, true);
