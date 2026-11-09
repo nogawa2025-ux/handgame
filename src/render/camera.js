@@ -4,10 +4,10 @@ import { gkId } from '../sim/state.js';
 
 const attackDir = (team) => (team === 0 ? 1 : -1);
 // duel framing (metres)
-export const VIEW = { KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
+export const VIEW = { CLOSE_DIST: 8, CLOSE_UP: 0.62, KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
 
 /**
- * Broadcast-style camera on the side line. When `mirror` is true the camera sits
+ * Close-up broadcast-style camera on the side line. When `mirror` is true the camera sits
  * on the opposite side so the local team (team 1) also attacks to the right.
  * During a shot duel it swings behind the shooter (our shot) or behind our own
  * goal (their shot), then eases back after the shot is decided.
@@ -38,9 +38,10 @@ export function createCamera() {
 
       // ----- broadcast target (also keeps `focus` warm for the way back)
       const narrow = innerWidth / innerHeight < 1.9;
-      const tx = Math.max(-13, Math.min(13, b.x));
-      const tz = b.z * 0.3;
-      const k = first ? 1 : Math.min(1, dt * 3);
+      // close-up: follow the ball tightly, all the way to the goals and side lines
+      const tx = Math.max(-17, Math.min(17, b.x));
+      const tz = b.z * 0.7;
+      const k = first ? 1 : Math.min(1, dt * 4);
       focus.x += (tx - focus.x) * k;
       focus.z += (tz - focus.z) * k;
 
@@ -67,9 +68,9 @@ export function createCamera() {
         tLook.set(gk.x + (shooterAt.x - gk.x) * 0.45, 0.9, gk.z + (shooterAt.z - gk.z) * 0.45);
       } else {
         const side = mirror ? -1 : 1;
-        const dist = narrow ? 15 : 13.5;
-        tPos.set(focus.x, dist * 0.72, focus.z + side * dist);
-        tLook.set(focus.x, 0, focus.z + side * 1.5);
+        const dist = narrow ? VIEW.CLOSE_DIST + 1 : VIEW.CLOSE_DIST;
+        tPos.set(focus.x, dist * VIEW.CLOSE_UP, focus.z + side * dist);
+        tLook.set(focus.x, 0.6, focus.z + side * 0.8);
       }
       // once back on the side line, follow exactly as before (no extra lag)
       const settled = mode === 'broadcast' && pos.distanceTo(tPos) < 0.6;
