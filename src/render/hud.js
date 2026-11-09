@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 export function createHud() {
   const hud = $('hud'), score = $('score-text'), clock = $('clock'), banner = $('banner');
   const charge = $('charge'), fill = $('charge-fill'), stam = $('stamina'), passive = $('passive');
-  const mm = $('minimap'), g = mm.getContext('2d');
+  const mm = $('minimap'), g = mm.getContext('2d'), hint = $('duelhint');
   /** Court (40×20) → minimap pixels; mirrored so the local team always attacks to the right. */
   function drawMinimap(state, localTeam) {
     const W = mm.width, H = mm.height, pad = 6, sx = (W - pad * 2) / 40, sz = (H - pad * 2) / 20;
@@ -54,6 +54,10 @@ export function createHud() {
       });
       passive.classList.toggle('hidden', !state.attack?.warned);
       drawMinimap(state, localTeam);
+      const duel = state.duel;
+      document.body.classList.toggle('duel', !!duel);
+      hint.classList.toggle('hidden', !duel);
+      if (duel) hint.textContent = duel.team === localTeam ? '🎯 スティックで狙う → 離してシュート' : '🧤 キーパー：スティックで守る側を読む';
       const c = state.shootCharge[localTeam];
       charge.classList.toggle('on', c > 0);
       fill.style.width = `${Math.round(c * 100)}%`;

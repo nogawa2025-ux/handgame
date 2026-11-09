@@ -65,9 +65,9 @@ export const LESSONS = [
   },
   {
     title: 'シュート',
-    text: 'シュートを長押しして力をためて、離して打つ。スティックの上下で左右の隅を狙おう。ゴールを決めたらクリア',
-    easyText: 'シュートを押すだけで、キーパーのいない隅を自動で狙う（長押しでさらに強く）。ゴールを決めたらクリア',
-    pc: 'K / スペース 長押し',
+    text: 'シュートを長押しするとゴールを正面から見る視点に。スティックで赤い印を動かして狙い、離して打つ。キーパーが傾いている逆を突こう。ゴールでクリア',
+    easyText: 'シュートを長押しするとゴールを正面から見る視点に。スティックで赤い印を動かして狙う（狙わなければキーパーの傾きの逆へ自動）。ゴールでクリア',
+    pc: 'K 長押し中に WASD で狙う',
     attack: true,
     setup(s) { shootingSpot(s); calm(s); },
     tick: calm,
@@ -103,6 +103,24 @@ export const LESSONS = [
     retryHint: 'もう一度守ろう',
   },
   {
+    title: 'キーパー',
+    text: '相手がシュートを構えると、自分のゴールの後ろからの視点に。スティックでキーパーが守る側（上下左右）を読む。早く動くと逆を突かれる。セーブでクリア',
+    pc: 'WASD でキーパーを動かす',
+    defend: true,
+    setup(s) {
+      base(s, 1);
+      // a CPU shooter already set up near our goal, ready to shoot
+      const sh = s.players[9];
+      Object.assign(sh, { x: -10.5, z: 1.5, vx: 0, vz: 0 });
+      giveBall(s, 9);
+      s.attack = { team: 1, time: 20, warned: false, build: 0 };
+      for (const id of teamIds(0).slice(1)) Object.assign(s.players[id], { x: -2 - id, z: (id % 2 ? 6 : -6) });
+    },
+    tick(s) { if (s.attack) s.attack.warned = false; for (const id of teamIds(0).slice(1)) { const p = s.players[id]; p.stun = 0.2; } },
+    done(s, ev) { return ev.includes('save'); },
+    retryHint: 'もう一度。相手の体の向きと、自分の傾きをよく見て',
+  },
+  {
     title: '交代',
     text: '疲れた選手（左上のバーが赤）を、右上の交代ボタンでベンチの選手と替えよう',
     pc: 'C',
@@ -134,6 +152,7 @@ export function createTutorial(hooks = {}) {
       if (s.time < 60) s.time = C.MATCH_TIME; // the clock never runs out (it still ticks so luck varies)
       if (s.attack) { s.attack.time = 0; s.attack.warned = false; }
       if (!pending) LESSONS[i].tick?.(s);
+    if (s.attack && LESSONS[i].title === 'キーパー') { s.attack.time = 20; s.attack.build = 0; }
     },
     after(s, events, input, dt) {
       if (t.finished) return;

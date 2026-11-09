@@ -44,7 +44,7 @@ export function title({ onCreate, onJoin, onCpu, onTutorial, easy, onToggleEasy 
         <button id="b-cpu">CPUと練習</button>
         <button id="b-tut">チュートリアル</button>
       </div>
-      <button class="mode" id="b-mode">操作：<b>${easy ? 'かんたん' : '上級'}</b><small>${easy ? '自動で狙う・パス先を選ぶ・守備も自動' : '狙い・パス先・カットを全部自分で'}</small></button>
+      <button class="mode" id="b-mode">操作：<b>${easy ? 'かんたん' : '上級'}</b><small>${easy ? 'パス先を自動で選ぶ・守備も自動・狙わなければ自動で狙う' : '狙い・パス先・カットを全部自分で'}</small></button>
     </div>`);
   on('#b-create', onCreate);
   on('#b-join', onJoin);

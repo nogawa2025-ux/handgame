@@ -1,6 +1,7 @@
 import { C } from './constants.js';
 import { attackDir, teamIds, gkId, giveBall } from './state.js';
 import { inGoalArea } from './geometry.js';
+import { keeperReaches } from './duel.js';
 import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint, shotFeint, roll, bestPassTarget } from './actions.js';
 
 // Attack spots in attack space (+x toward the goal being attacked, goal at x=20).
@@ -51,14 +52,29 @@ function carrier(s, p, dt) {
     return Math.hypot(p.x + ax * u - q.x, p.z + az * u - q.z) > 0.9;
   });
   const hurry = s.attack?.warned && s.attack.team === p.team;
-  // 7m throw: settle, then shoot
-  if (s.penalty && s.penalty.team === p.team) {
-    if (s.penalty.time > 0.8) {
-      const gk = s.players[gkId(1 - p.team)];
-      const r = roll(s, p.id + 5);
-      const side = gk.z > 0.1 ? -1 : gk.z < -0.1 ? 1 : (r < 0.5 ? -1 : 1);
-      shoot(s, p.id, side * (0.75 + 0.25 * r), 0.8 + 0.2 * r);
+  // winding up: stand, then release at the side the keeper isn't leaning to (mostly)
+  if (p.windup > 0) {
+    p.windup += dt;
+    const len = C.CPU_WINDUP + 0.25 * roll(s, p.id + 3);
+    s.shootCharge[p.team] = Math.min(1, p.windup / len);
+    // the run-up continues during the wind-up (into the jump)
+    moveTo(p, gx - d * 7, p.z * 0.8, dt, false, 0.7);
+    // sometimes sell the shot first
+    if (!p.shotFeinted && p.windup > len * 0.6 && roll(s, p.id + 17) < 0.15) {
+      shotFeint(s, p.id, -1, 0.6); p.shotFeinted = true; p.windup = 0; s.shootCharge[p.team] = 0; return;
     }
+    if (p.windup >= len) {
+      const gk = s.players[gkId(1 - p.team)];
+      const r = roll(s, p.id + 5), r2 = roll(s, p.id + 9);
+      const lz = gk.leanZ ?? 0;
+      const side = Math.abs(lz) > 0.2 && r < C.CPU_READ ? -Math.sign(lz) : (r2 < 0.5 ? -1 : 1);
+      shoot(s, p.id, side * (0.6 + 0.4 * r2), 0.85 + 0.15 * r, r < 0.5 ? -0.7 + 0.4 * r2 : 0.4 + 0.5 * r2);
+    }
+    return;
+  }
+  // 7m throw: settle, then wind up
+  if (s.penalty && s.penalty.team === p.team) {
+    if (s.penalty.time > 0.8) p.windup = 1e-3;
     return;
   }
   // real handball: pass it around the 9m line first, unless the defence isn't set (fast break)
@@ -70,13 +86,7 @@ function carrier(s, p, dt) {
   const wideOpen = laneOpen && threat > 2.6;
   if ((distGoal < 9.6 && b.holdTime > 0.35 && ((ready && (laneOpen || b.holdTime > 2.2)) || (wideOpen && b.holdTime > 0.6)))
     || (hurry && distGoal < 12 && b.holdTime > 0.2)) {
-    const gk = s.players[gkId(1 - p.team)];
-    const aim = gk.z > 0 ? -1 : gk.z < 0 ? 1 : (p.z >= 0 ? -1 : 1);
-    // vary placement and power like a real shooter (deterministic, from the clock)
-    const r = Math.abs(Math.sin(s.time * 12.9898 + p.id * 78.233) * 43758.5453) % 1;
-    // sometimes sell a shot to the other corner first (the keeper leans the wrong way)
-    if (!p.shotFeinted && r < 0.15) { shotFeint(s, p.id, -aim, 0.6); p.shotFeinted = true; return; }
-    shoot(s, p.id, aim * (0.9 + 0.1 * r), 0.85 + 0.15 * ((r * 7.31) % 1));
+    p.windup = 1e-3; // start the wind-up (the keeper gets to read it)
     return;
   }
   // under pressure from a marker who hasn't been fooled yet: try a step feint first
@@ -122,16 +132,8 @@ function keeper(s, team, dt, cpu) {
   if (incoming) {
     // save check when the ball reaches the keeper's plane
     if ((b.x - gk.x) * Math.sign(own) >= 0 && Math.abs(b.x - gk.x) < 0.6 && b.y < 2.4) {
-      // a keeper wrong-footed by a shot feint can barely reach the other side
-      const lean = b.gkLean || (gk.offBalance > 0 ? Math.sign(gk.lean) : 0);
-      const wrongSide = lean !== 0 && Math.sign(b.z - gk.z) !== lean;
-      // on a long flight the keeper also shuffles across before diving, so distance shots get covered
-      const shuffle = Math.max(0, b.shotAge - 0.7) * C.GK_SPEED;
-      const cap = (wrongSide ? 0.45 : C.GK_REACH) + shuffle;
-      // a bit of luck either way: some corners get a fingertip, some soft ones squeeze in
-      const luck = (roll(s, 7 + team) - 0.5) * C.GK_LUCK;
-      const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE + shuffle + luck);
-      if (Math.abs(b.z - gk.z) <= reach) {
+      // the keeper's read (lean) decides which part of the goal it covers
+      if (keeperReaches(gk, b)) {
         giveBall(s, gk.id);
         s.gkTimer[team] = 0;
         s.events.push('save');
@@ -148,7 +150,6 @@ function keeper(s, team, dt, cpu) {
   const tx = own - Math.sign(own) * 1.0;
   const dx = b.x - own, dz = b.z;
   let tz = Math.max(-C.GOAL_HALF_W * 0.8, Math.min(C.GOAL_HALF_W * 0.8, Math.abs(dx) > 0.1 ? (dz * 1.0) / Math.abs(dx) : 0));
-  if (gk.offBalance > 0) tz = Math.max(-C.GOAL_HALF_W, Math.min(C.GOAL_HALF_W, tz + gk.lean));
   const ddx = tx - gk.x, ddz = tz - gk.z;
   const d = Math.hypot(ddx, ddz);
   if (d < 0.05) movePlayer(gk, 0, 0, false, false, dt, C.GK_SPEED);
@@ -167,7 +168,8 @@ export function aiTick(s, team, dt, cpuControlsAll) {
   const d = attackDir(team);
   const attacking = possession(s) === team;
   const ids = teamIds(team).slice(1);
-  const human = cpuControlsAll ? null : s.controlled[team];
+  // while our keeper faces a shot the human steers the keeper, so the AI runs the field
+  const human = cpuControlsAll || (s.duel && s.duel.team !== team) ? null : s.controlled[team];
   const loose = b.holder === null && b.passTarget === null && !b.shot;
   const chaser = loose ? nearestToBall(s, team) : null;
   // presser: nearest non-human defender when the holder is near our goal

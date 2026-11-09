@@ -104,24 +104,18 @@ test('plain pass still works when not charging a shot', () => {
   assert.equal(s.ball.passTarget, 2);
 });
 
-test('a keeper wrong-footed by a shot feint cannot cover the other corner', () => {
-  const mk = (feint) => {
-    const s = attackSetup(); s.players[8].x = -5;
-    run(s, 30, () => [idle(), idle()]); // keeper settles
-    run(s, 24, () => [{ ...idle(), shootHeld: true, mz: feint ? 1 : 0 }, idle()]);
-    if (feint) {
-      step(s, [{ ...idle(), shootHeld: true, pass: true, mz: 1 }, idle()], DT);
-      step(s, [{ ...idle(), shootRelease: true }, idle()], DT); // let go of the spent button
-    }
-    run(s, 10, () => [{ ...idle(), shootHeld: true, mz: -0.6 }, idle()]);
-    step(s, [{ ...idle(), shootRelease: true, mz: -0.6 }, idle()], DT);
-    let saved = false;
-    for (let i = 0; i < 90; i++) { step(s, [idle(), idle()], DT); saved ||= s.events.includes('save'); }
-    return { saved, score: s.score[0] };
-  };
-  const plain = mk(false), faked = mk(true);
-  assert.equal(plain.saved, true, 'medium shot is normally saved');
-  assert.equal(faked.score, 1, 'after the feint the same shot goes in');
+test('a CPU keeper sold a shot feint leans that way and the other side opens up', () => {
+  const s = attackSetup(); s.players[8].x = -5;
+  const quiet = () => { for (const p of s.players) if (p.team === 1 && p.role === 'field') { p.x = -15; p.z = 9; } };
+  for (let i = 0; i < 30; i++) { step(s, [idle(), null], DT); quiet(); }
+  for (let i = 0; i < 24; i++) { step(s, [{ ...idle(), shootHeld: true, sx: 1 }, null], DT); quiet(); }
+  step(s, [{ ...idle(), shootHeld: true, pass: true, sx: 1 }, null], DT);
+  step(s, [{ ...idle(), shootRelease: true }, null], DT);
+  for (let i = 0; i < 12; i++) { step(s, [{ ...idle(), shootHeld: true, sx: -0.75 }, null], DT); quiet(); }
+  assert.ok(s.players[7].leanZ > 0.3, 'keeper leans to the faked side');
+  step(s, [{ ...idle(), shootRelease: true, sx: -0.75 }, null], DT);
+  for (let i = 0; i < 90; i++) { step(s, [idle(), null], DT); if (s.score[0]) break; }
+  assert.equal(s.score[0], 1, 'the shot to the open side goes in');
 });
 
 test('aiming during a wind-up never triggers a step feint', () => {

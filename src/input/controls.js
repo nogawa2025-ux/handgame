@@ -157,7 +157,7 @@ export function createControls(root, opts = { mirror: false }) {
       const { mx, mz } = toCourt(sx, sy, mirror);
       const heldKey = (name) => Object.entries(KEYMAP).some(([k, v]) => v === name && keys.has(k));
       const input = {
-        mx, mz,
+        mx, mz, sx, sy, // sx/sy: raw screen stick (aiming in the shot view)
         dash: snap.held.has('dash') || heldKey('dash'),
         pass: snap.pressed.has('pass') || keyPressed.has('pass') || pending.pass,
         long: snap.pressed.has('long') || keyPressed.has('long') || pending.long,

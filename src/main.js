@@ -10,6 +10,8 @@ import { isValidCode } from './net/peer.js';
 import * as screens from './ui/screens.js';
 import * as net from './net/session.js';
 import { createTutorial } from './ui/tutorial.js';
+import { C } from './sim/constants.js';
+import { stickAim } from './sim/duel.js';
 
 const DT = 1 / 60;
 const $ = (id) => document.getElementById(id);
@@ -41,7 +43,7 @@ const neutral = () => ({ mx: 0, mz: 0, dash: false, pass: false, long: false, sh
 /** Merge edge events so none are lost when several inputs collapse into one tick. */
 export function mergeInput(a, b) {
   return {
-    mx: b.mx, mz: b.mz, dash: b.dash, shootHeld: b.shootHeld,
+    mx: b.mx, mz: b.mz, sx: b.sx, sy: b.sy, dash: b.dash, shootHeld: b.shootHeld,
     pass: a.pass || b.pass, long: a.long || b.long, shootRelease: a.shootRelease || b.shootRelease, sub: a.sub || b.sub,
     easy: b.easy,
   };
@@ -64,6 +66,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
   let ended = false;
   let display = state;
   let lastPhase = state.phase;
+  let lastLocal = null;
   const guestSync = role === 'guest' ? net.createGuestSync(conn, state) : null;
   const hostSync = role === 'host' ? net.createHostSync(conn) : null;
   if (hostSync) {
@@ -113,6 +116,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
     frame(dt) {
       if (ended) return display;
       const local = { ...controls.read(), easy: settings.easy };
+      lastLocal = local;
       localQ.add(local);
       if (role === 'guest') {
         guestSync.sendInput(local);
@@ -127,7 +131,8 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
           const li = first ? (taken = localQ.take()) : { ...taken, pass: false, long: false, shootRelease: false, sub: false };
           const ri = role === 'host' ? (first ? remoteInput : { ...remoteInput, pass: false, long: false, shootRelease: false, sub: false }) : null;
           tutorial?.before(state);
-          step(state, localTeam === 0 ? [li, ri] : [ri, li], DT);
+          // a shot duel plays in slight slow motion (the same for both players: the host sets the pace)
+          step(state, localTeam === 0 ? [li, ri] : [ri, li], DT * (state.duel ? C.DUEL_SLOWMO : 1));
           tutorial?.after(state, state.events, li, DT);
           evs.push(...state.events);
           first = false;
@@ -148,6 +153,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
     mirror,
     localTeam,
     get state() { return display; },
+    get aim() { return lastLocal ? stickAim(localTeam, lastLocal) : null; },
     sim: state,
     stop() { ended = true; hostSync?.stop(); guestSync?.stop(); $('controls').classList.add('hidden'); hud.show(false); },
   };
@@ -174,7 +180,7 @@ const app = {
     document.body.classList.add('tut');
     const box = $('tutorial'), msg = $('t-msg');
     const pc = matchMedia('(pointer: fine)').matches;
-    const HINTS = [['stick-base'], ['btn-dash'], ['btn-pass'], ['btn-shoot'], ['btn-shoot', 'btn-pass'], ['stick-base'], ['btn-pass', 'btn-shoot'], ['btn-sub']];
+    const HINTS = [['stick-base'], ['btn-dash'], ['btn-pass'], ['btn-shoot'], ['btn-shoot', 'btn-pass'], ['stick-base'], ['btn-pass', 'btn-shoot'], ['stick-base'], ['btn-sub']];
     const setHints = (ids) => {
       document.querySelectorAll('.hint').forEach((e) => e.classList.remove('hint'));
       for (const id of ids) $(id)?.classList.add('hint');
@@ -291,8 +297,8 @@ function loop(now) {
     step(view, [null, null], dt);
     if (view.phase === 'ended') Object.assign(view, createMatchState());
   }
-  if (views) views.update(shown, dt, localTeam);
-  cam.follow(shown, dt, mirror);
+  if (views) views.update(shown, dt, localTeam, match?.aim);
+  cam.follow(shown, dt, mirror, localTeam, !!match);
   renderer.render(scene, cam.camera);
   requestAnimationFrame(loop);
 }

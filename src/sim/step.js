@@ -3,6 +3,7 @@ import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea } from './geometry.
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
 import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock, bestPassTarget, stealChance, fromBehind, roll } from './actions.js';
 import { aiTick } from './ai.js';
+import { duelTick, stickAim } from './duel.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
 export const possessionTeam = (s) => (s.ball.holder !== null ? s.players[s.ball.holder].team : s.ball.lastTeam);
@@ -49,6 +50,7 @@ export function step(s, inputs, dt) {
   sevenMeterTick(s, inputs, dt);
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
   for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);
+  duelTick(s, inputs, dt);
   for (const p of s.players) {
     p.stealCd = Math.max(0, p.stealCd - dt);
     p.stun = Math.max(0, (p.stun ?? 0) - dt);
@@ -125,6 +127,8 @@ export function expirePass(b, dt) {
 function humanTick(s, t, inp, dt) {
   if (inp == null) return;
   const b = s.ball;
+  // facing a shot: the stick drives the keeper (duelTick), field players are left to the AI
+  if (s.duel && s.duel.team !== t) { s.prevShootHeld[t] = !!inp.shootHeld; return; }
   const attacking = possessionTeam(s) === t;
   if (!attacking && inp.pass) s.controlled[t] = nearestToBall(s, t);
   if (inp.easy && !attacking) autoSwitch(s, t);
@@ -147,8 +151,10 @@ function humanTick(s, t, inp, dt) {
     s.lastStick[t] = { x: nx, z: nz, age: 0 };
   }
   const sevenThrower = s.penalty && holding;
-  if (sevenThrower) inp = { ...inp, mx: 0, mz: inp.easy ? 0 : inp.mz, pass: false, long: false, dash: false };
-  if (me.stun > 0 || sevenThrower) movePlayer(me, 0, 0, false, false, dt);
+  if (sevenThrower) inp = { ...inp, pass: false, long: false, dash: false };
+  // winding up a shot in range: the stick aims at the goal instead of moving the player
+  const aiming = holding && s.shootCharge[t] > 0 && s.duel?.shooter === me.id;
+  if (me.stun > 0 || sevenThrower || aiming) movePlayer(me, 0, 0, false, false, dt);
   else movePlayer(me, inp.mx, inp.mz, inp.dash, holding && b.holdTime > C.HOLD_LIMIT, dt);
 
   if (b.holder !== null && b.holder === gkId(t)) {
@@ -161,7 +167,7 @@ function humanTick(s, t, inp, dt) {
     }
   } else if (holding) {
     if (inp.pass && inp.shootHeld && s.shootCharge[t] > 0) {
-      shotFeint(s, me.id, inp.mz, s.shootCharge[t]);
+      shotFeint(s, me.id, stickAim(t, inp).z || 1, s.shootCharge[t]);
       s.shootCharge[t] = 0;
       s.feintHold[t] = true;
     } else if (inp.pass) {
@@ -178,12 +184,13 @@ function humanTick(s, t, inp, dt) {
       s.shootCharge[t] = Math.min(1, s.shootCharge[t] + dt / C.SHOT_CHARGE_TIME);
     }
     if (inp.shootRelease && b.holder === me.id) {
-      if (inp.easy) {
-        // easy: a tap is already a decent shot, aimed at the corner away from the keeper
+      const aim = stickAim(t, inp);
+      if (inp.easy && Math.hypot(inp.sx ?? 0, inp.sy ?? 0) < 0.2) {
+        // easy, no aim given: go away from where the keeper leans (which may be a bluff)
         const gk = s.players[gkId(1 - t)];
-        const aim = Math.abs(gk.z - me.z * 0.1) < 0.05 ? (me.z >= 0 ? -1 : 1) : gk.z > me.z * 0.1 ? -1 : 1;
-        shoot(s, me.id, aim * 0.95, Math.max(C.EASY_MIN_CHARGE, s.shootCharge[t]));
-      } else shoot(s, me.id, inp.mz, s.shootCharge[t]);
+        const side = -Math.sign((gk.leanZ ?? 0) || gk.z || (me.z >= 0 ? 1 : -1));
+        shoot(s, me.id, side * 0.8, Math.max(C.EASY_MIN_CHARGE, s.shootCharge[t]), roll(s, me.id) < 0.5 ? -0.6 : 0.6);
+      } else shoot(s, me.id, aim.z, inp.easy ? Math.max(C.EASY_MIN_CHARGE, s.shootCharge[t]) : s.shootCharge[t], aim.h);
       s.shootCharge[t] = 0;
     }
   } else {
@@ -210,7 +217,8 @@ function sevenMeterTick(s, inputs, dt) {
   sh.vx = sh.vz = 0;
   if (pen.time > C.SEVEN_LIMIT) {
     const inp = inputs[pen.team];
-    shoot(s, sh.id, inp?.easy || !inp ? (s.players[pen.team === 0 ? 7 : 0].z > 0 ? -0.95 : 0.95) : inp.mz, Math.max(0.6, s.shootCharge[pen.team]));
+    const aim = stickAim(pen.team, inp);
+    shoot(s, sh.id, aim.z, Math.max(0.6, s.shootCharge[pen.team]), aim.h);
     s.shootCharge[pen.team] = 0;
   }
 }

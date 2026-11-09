@@ -27,7 +27,7 @@ export async function loadPlayers(scene, players) {
 
   const views = players.map((p) => {
     const color = COLORS[p.role][p.team];
-    let root, mixer = null, actions = {}, arm = null;
+    let root, mixer = null, actions = {}, arm = null, armL = null;
     if (gltf) {
       root = cloneSkinned(gltf.scene);
       root.traverse((o) => {
@@ -40,6 +40,7 @@ export async function loadPlayers(scene, players) {
           o.material = m;
         }
         if (o.isBone && o.name === 'mixamorigRightArm') arm = o;
+        if (o.isBone && o.name === 'mixamorigLeftArm') armL = o;
       });
       mixer = new THREE.AnimationMixer(root);
       for (const clip of gltf.animations) {
@@ -55,7 +56,7 @@ export async function loadPlayers(scene, players) {
       root = fallbackModel(color);
     }
     scene.add(root);
-    return { root, mixer, actions, arm, weights: { idle: 1, walk: 0, run: 0 } };
+    return { root, mixer, actions, arm, armL, weights: { idle: 1, walk: 0, run: 0 } };
   });
 
   // controlled-player marker: ring on the floor + triangle above the head
@@ -77,15 +78,38 @@ export async function loadPlayers(scene, players) {
   ballShadow.position.y = 0.015;
   scene.add(ballShadow);
 
+  // aiming target on the goal mouth (only for the local shooter)
+  const reticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.12, 0.2, 24),
+    new THREE.MeshBasicMaterial({ color: 0xff3b3b, transparent: true, opacity: 0.95, depthTest: false, side: THREE.DoubleSide }),
+  );
+  reticle.renderOrder = 10;
+  reticle.visible = false;
+  scene.add(reticle);
+
   let t = 0;
   return {
-    /** Update all views from a MatchState. */
-    update(state, dt, localTeam) {
+    /** Update all views from a MatchState. aim: local shooter's {z, h} or null. */
+    update(state, dt, localTeam, aim = null) {
+      const shooting = aim && state.duel && state.duel.team === localTeam;
+      reticle.visible = !!shooting;
+      if (shooting) {
+        const d = localTeam === 0 ? 1 : -1;
+        reticle.position.set(d * (C.COURT_HALF_X + 0.05), C.SHOT_Y_MID + aim.h * C.AIM_REACH * C.SHOT_Y_RANGE, aim.z * C.AIM_REACH * C.GOAL_HALF_W);
+        reticle.rotation.set(0, Math.PI / 2, 0);
+        const pulse = 1 + Math.sin(t * 10) * 0.08;
+        reticle.scale.set(pulse, pulse, pulse);
+      }
       t += dt;
       state.players.forEach((p, i) => {
         const v = views[i];
         const jt = p.jump > 0 ? 1 - p.jump / C.JUMP_TIME : 0; // 0→1 through the jump
         v.root.position.set(p.x, p.jump > 0 ? 4 * C.JUMP_H * jt * (1 - jt) : 0, p.z);
+        // keeper's read: shift and tilt toward the side it covers, crouch for low balls
+        const lz = p.role === 'gk' ? (p.leanZ ?? 0) : 0, lh = p.role === 'gk' ? (p.leanH ?? 0) : 0;
+        v.root.position.z += lz * 0.3;
+        v.root.rotation.z = lz * 0.32 * (p.team === 0 ? 1 : -1);
+        if (lh < 0) v.root.position.y += lh * 0.18;
         const target = yaw(p.facing);
         let diff = target - v.root.rotation.y;
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -100,6 +124,12 @@ export async function loadPlayers(scene, players) {
         }
         if (v.actions.run) v.actions.run.setEffectiveTimeScale(Math.max(0.6, speed / 5.5));
         v.mixer.update(dt);
+        // blocking defenders and a keeper reading high: both arms up; reading low: arms out
+        const up = p.armsUp ? 1 : p.role === 'gk' ? Math.max(0, lh) : 0;
+        const out = p.role === 'gk' ? Math.max(0, -lh) * 0.8 + 0.25 : 0;
+        if (v.arm && v.armL && (up > 0 || out > 0)) {
+          v.arm.rotation.z += 1.5 * up + out; v.armL.rotation.z -= 1.5 * up + out;
+        }
         // throw/shoot pose: raise the right arm briefly
         if (v.arm && (p.anim === 'pass' || p.anim === 'shoot') && p.animTimer > 0) {
           const k = Math.sin(Math.min(1, p.animTimer / (p.anim === 'shoot' ? 0.4 : 0.3)) * Math.PI);
@@ -108,6 +138,7 @@ export async function loadPlayers(scene, players) {
         }
       });
       const c = state.players[state.controlled[localTeam]];
+      ring.visible = arrow.visible = !state.duel; // markers would sit in front of the goal in the duel view
       if (c) {
         ring.position.x = c.x; ring.position.z = c.z;
         arrow.position.set(c.x, 2.25 + Math.sin(t * 6) * 0.06, c.z);

@@ -93,6 +93,8 @@ function launch(s, from, tx, tz, ty, speed, fromY = 1.1) {
   const b = s.ball;
   b.holder = null; b.holdTime = 0; b.lastTeam = from.team;
   b.thrower = from.id; b.throwTimer = 0.25; b.flightAge = 0;
+  from.windup = 0;
+  if (s.shootCharge) s.shootCharge[from.team] = 0;
   b.x = from.x + Math.cos(from.facing) * 0.4; b.z = from.z + Math.sin(from.facing) * 0.4; b.y = fromY;
   const dx = tx - b.x, dz = tz - b.z;
   const dist = Math.max(0.1, Math.hypot(dx, dz));
@@ -112,10 +114,18 @@ export function throwBall(s, fromId, toId, speed) {
   s.events.push('pass');
 }
 
-export function shoot(s, fromId, aimZ, charge) {
+/**
+ * Shoot at a point of the goal: aimZ -1..1 across the goal (court z), aimH -1..1 low..high.
+ * Harder shots scatter a little more, so aiming right at the post can miss.
+ */
+export function shoot(s, fromId, aimZ, charge, aimH = 0) {
   const from = s.players[fromId];
   const gx = goalX(from.team) + (from.team === 0 ? 0.6 : -0.6); // aim slightly behind the line
-  const tz = Math.max(-1, Math.min(1, aimZ)) * C.GOAL_HALF_W * 0.9;
+  const c = Math.max(0, Math.min(1, charge));
+  const err = C.AIM_ERR + C.AIM_ERR_POWER * c;
+  const ez = (roll(s, fromId + 71) - 0.5) * 2 * err, eh = (roll(s, fromId + 83) - 0.5) * 2 * err;
+  const tz = (Math.max(-1, Math.min(1, aimZ)) * C.AIM_REACH + ez) * C.GOAL_HALF_W;
+  const ty = Math.max(0.15, C.SHOT_Y_MID + (Math.max(-1, Math.min(1, aimH)) * C.AIM_REACH + eh) * C.SHOT_Y_RANGE);
   const tired = 0.85 + 0.15 * (from.stamina ?? 1);
   const speed = (C.SHOT_MIN + (C.SHOT_MAX - C.SHOT_MIN) * Math.max(0, Math.min(1, charge))) * tired;
   from.facing = Math.atan2(tz - from.z, gx - from.x);
@@ -126,13 +136,10 @@ export function shoot(s, fromId, aimZ, charge) {
     from.jump = C.JUMP_TIME;
     from.vx = d * Math.max(2.2, from.vx * d); from.vz *= 0.6;
   }
-  launch(s, from, gx, tz, 0.9 + 0.6 * Math.abs(aimZ), speed, jump ? C.JUMP_RELEASE_Y : 1.1);
+  launch(s, from, gx, tz, ty, speed, jump ? C.JUMP_RELEASE_Y : 1.1);
   s.penalty = null;
   const b = s.ball;
   b.passTarget = null; b.shot = true; b.shotTeam = from.team; b.shotAge = 0; b.blockChecked = [];
-  // a keeper already leaning the wrong way stays committed for this shot
-  const gk = s.players[from.team === 0 ? 7 : 0];
-  b.gkLean = gk.offBalance > 0 ? Math.sign(gk.lean) : 0;
   from.anim = 'shoot'; from.animTimer = 0.4;
   s.events.push('shot');
 }
@@ -229,9 +236,13 @@ export function tryBlock(s) {
   if (!b.shot || b.shotAge > C.BLOCK_WINDOW || b.y > C.BLOCK_H || !b.blockChecked) return false;
   for (const q of s.players) {
     if (q.team === b.shotTeam || q.role !== 'field' || q.stun > 0 || b.blockChecked.includes(q.id)) continue;
-    if (Math.hypot(q.x - b.x, q.z - b.z) > C.BLOCK_R) continue;
+    // body: anything close; raised arms: a wider reach, but only for shots above the waist
+    const dist = Math.hypot(q.x - b.x, q.z - b.z);
+    const body = dist <= C.BODY_R && b.y < 2.0;
+    const arms = q.armsUp && dist <= C.BLOCK_R && b.y > 1.05;
+    if (!body && !arms) continue;
     b.blockChecked.push(q.id); // one chance per defender per shot
-    if (roll(s, q.id + 57) >= C.BLOCK_CHANCE) continue;
+    if (roll(s, q.id + 57) >= (body ? 0.6 : C.BLOCK_CHANCE)) continue;
     const sp = Math.hypot(b.vx, b.vz);
     b.vx = -b.vx * 0.12; b.vz = (roll(s, q.id + 91) < 0.5 ? -1 : 1) * (0.2 + 0.2 * roll(s, q.id + 13)) * sp; b.vy = 1.5;
     b.shot = false; b.shotTeam = null; b.passTarget = null; b.lastTeam = q.team; b.thrower = q.id; b.throwTimer = 0.2;

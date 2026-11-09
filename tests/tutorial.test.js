@@ -22,7 +22,7 @@ function play(n, script, maxTicks = 60 * 40) {
 }
 
 test('there is a lesson for every control', () => {
-  assert.deepEqual(LESSONS.map((l) => l.title), ['移動', 'ダッシュ', 'パス', 'シュート', 'シュートフェイント', '切り返し', '守備', '交代']);
+  assert.deepEqual(LESSONS.map((l) => l.title), ['移動', 'ダッシュ', 'パス', 'シュート', 'シュートフェイント', '切り返し', '守備', 'キーパー', '交代']);
 });
 
 test('move, dash and pass lessons clear', () => {
@@ -36,8 +36,8 @@ test('shooting lesson clears with a charged corner shot, retrying after saves', 
   const r = play(3, (s) => {
     if (s.ball.holder !== s.controlled[0]) { c = 0; return idle(); }
     c++;
-    const aim = s.players[7].z > 0 ? -1 : 1;
-    return c < 45 ? { ...idle(), shootHeld: true, mz: aim } : { ...idle(), shootRelease: true, mz: aim };
+    const aim = (s.players[7].leanZ ?? 0) > 0 ? -1 : 1;
+    return c < 45 ? { ...idle(), shootHeld: true, sx: aim, sy: 0.6 } : { ...idle(), shootRelease: true, sx: aim, sy: 0.6 };
   });
   assert.ok(r.k > 0, `retries ${r.retries}`);
 });
@@ -56,8 +56,13 @@ test('defence lesson clears by winning the ball', () => {
   assert.ok(r.k > 0, `retries ${r.retries}`);
 });
 
+test('keeper lesson: a CPU shooter winds up and a save clears it', () => {
+  const r = play(7, (s, k) => ({ ...idle(), sx: Math.sin(k * 0.05), sy: 0 }), 60 * 120);
+  assert.ok(r.k > 0, `retries ${r.retries}`);
+});
+
 test('substitution lesson clears and the tutorial finishes after the last lesson', () => {
-  const r = play(7, (s, k) => ({ ...idle(), sub: k === 3 }));
+  const r = play(8, (s, k) => ({ ...idle(), sub: k === 3 }));
   assert.ok(r.k > 0);
   let finished = false;
   const s = createMatchState();

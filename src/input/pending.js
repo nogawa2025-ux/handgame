@@ -7,7 +7,7 @@ export class PendingInput {
   add(inp) {
     if (!this.cur) { this.cur = { ...inp }; return; }
     const c = this.cur;
-    Object.assign(c, { mx: inp.mx, mz: inp.mz, dash: inp.dash, shootHeld: inp.shootHeld });
+    Object.assign(c, { mx: inp.mx, mz: inp.mz, sx: inp.sx, sy: inp.sy, dash: inp.dash, shootHeld: inp.shootHeld });
     for (const k of EDGES) c[k] = c[k] || inp[k];
   }
   /** Input for the next sim step; edges are cleared after being taken once. */

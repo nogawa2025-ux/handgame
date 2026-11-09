@@ -23,10 +23,9 @@ export const C = Object.freeze({
   STEAL_RANGE_DRIBBLE: 1.6,
   STEAL_COOLDOWN: 0.6,
   CATCH_R: 0.7,
-  GK_REACH: 1.3,
-  GK_DIVE: 3.2,
+  GK_REACH: 0.9,         // reflex reach of a keeper standing square
+  GK_DIVE: 2.0,
   GK_REACT: 0.18,
-  GK_LUCK: 0.6,
   // stamina (per second): moving costs a little, dashing a lot, standing/bench recovers
   STAMINA_BASE: 0.0013,
   STAMINA_RUN: 0.0022,   // × (speed / RUN)^2
@@ -57,12 +56,31 @@ export const C = Object.freeze({
   // shot blocks: a defender standing in the shot's path can get a hand to it
   BLOCK_R: 0.8,
   BLOCK_H: 2.3,
-  BLOCK_CHANCE: 0.6,
+  BLOCK_CHANCE: 0.4,
   BLOCK_WINDOW: 0.45,         // only early in the flight (near the shooter)
   // passive play: attack too long without a shot → warning, then the ball changes sides
   PASSIVE_WARN: 15,
   PASSIVE_LIMIT: 22,
   CPU_SUB_COOLDOWN: 15,
+  // shooter–keeper duel
+  DUEL_RANGE: 14,          // wind-ups closer than this start a duel (camera, slow-mo, keeper read)
+  DUEL_SLOWMO: 0.6,
+  GK_LEAN_RATE: 6,         // how fast the keeper's lean follows its read (per second)
+  GK_LEAN_REACH: 0.6,      // full lean shifts the covered point this far sideways
+  GK_LEAN_H: 0.55,         // ...and this far up/down
+  GK_WRONG: 0.5,
+  GK_BODY: 0.4,            // shots this close to the keeper's body are always stopped           // reach on the side opposite a committed lean
+  GK_BLUFF: 0.45,          // CPU keeper: chance its visible lean is a bluff
+  GK_SHOW: 0.4,            // CPU keeper: how much it leans before the release
+  SHOT_Y_MID: 1.0,
+  SHOT_Y_RANGE: 0.8,       // aim height = mid ± range
+  AIM_REACH: 0.88,         // full stick aims just inside the post
+  AIM_ERR: 0.05,           // aim scatter (goal units): + AIM_ERR_POWER × charge
+  AIM_ERR_POWER: 0.1,
+  ARMS_UP_R: 2.5,
+  BODY_R: 0.45,
+  CPU_READ: 0.5,           // CPU shooter: chance it shoots away from the keeper's lean
+  CPU_WINDUP: 0.5,         // CPU wind-up time (+ up to 0.25s)
   // jump shot
   JUMP_TIME: 0.55,
   JUMP_H: 0.6,

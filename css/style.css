@@ -143,6 +143,12 @@ html, body {
   width: 132px; height: 68px; border-radius: 6px; background: rgba(10, 18, 30, .7); border: 1px solid rgba(255,255,255,.35);
 }
 
+#duelhint {
+  position: absolute; left: 50%; bottom: calc(84px + var(--safe-b)); transform: translateX(-50%);
+  background: rgba(10, 18, 30, .78); color: #fff; font-weight: 800; font-size: 14px; padding: 4px 12px; border-radius: 10px; white-space: nowrap;
+}
+body.duel #minimap { display: none; }
+
 /* tutorial */
 body.tut #scoreboard, body.tut #passive { display: none; }
 #tutorial {

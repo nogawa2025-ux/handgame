@@ -53,29 +53,29 @@ test('CPU vs CPU 5-minute match scores between 4 and 40 total and never throws',
 });
 
 // Keeper strength against player shots from the backcourt (9–12m), nobody else around.
-function freeShot(x, z, aim, frames) {
+function freeShot(x, z, aim, frames, sy = 0.5) {
   const s = createMatchState(); s.phase = 'play'; scatter(s);
   const hold = () => { s.players[1].x = x; s.players[1].z = z; for (const p of s.players) if (p.role === 'field' && p.id !== 1) { p.x = -15; p.z = 9; } };
   Object.assign(s.players[1], { x, z, facing: 0 }); giveBall(s, 1); s.controlled[0] = 1;
-  for (let i = 0; i < 40; i++) { step(s, [idle(), idle()], DT); hold(); }
-  for (let i = 0; i < frames; i++) { step(s, [{ ...idle(), shootHeld: true }, idle()], DT); hold(); }
-  step(s, [{ ...idle(), shootRelease: true, mz: aim }, idle()], DT);
-  for (let i = 0; i < 150; i++) { step(s, [idle(), idle()], DT); hold(); if (s.score[0] || s.events.includes('save')) break; }
+  for (let i = 0; i < 40; i++) { step(s, [idle(), null], DT); hold(); }
+  for (let i = 0; i < frames; i++) { step(s, [{ ...idle(), shootHeld: true }, null], DT); hold(); }
+  step(s, [{ ...idle(), shootRelease: true, sx: aim, sy }, null], DT);
+  for (let i = 0; i < 150; i++) { step(s, [idle(), null], DT); hold(); if (s.score[0] || s.events.includes('save')) break; }
   return s.score[0] ? 'goal' : s.events.includes('save') ? 'save' : 'miss';
 }
-const rate = (frames) => {
+const rate = (frames, a = 1) => {
   let goals = 0, n = 0;
-  for (const x of [8, 9.5, 11]) for (const z of [-6, -3, 0, 3, 6]) for (const aim of [-1, 1]) { n++; if (freeShot(x, z, aim, frames) === 'goal') goals++; }
+  for (const x of [8, 9.5, 11]) for (const z of [-6, -3, 0, 3, 6]) for (const aim of [-a, a]) { n++; if (freeShot(x, z, aim, frames) === 'goal') goals++; }
   return goals / n;
 };
 
-test('keeper is realistic: full-power corner shots from distance score roughly 30–55%', () => {
+test('keeper duel: low corners picked blindly beat a bluffing CPU keeper a fair share', () => {
   const r = rate(48);
-  assert.ok(r >= 0.3 && r <= 0.55, `goal rate ${r}`);
+  assert.ok(r >= 0.25 && r <= 0.6, `goal rate ${r}`);
 });
 
-test('keeper saves most half-power shots', () => {
-  assert.ok(rate(24) <= 0.35);
+test('shots at the keeper are saved', () => {
+  assert.ok(rate(48, 0) <= 0.05, `goal rate ${rate(48, 0)}`);
 });
 
 test('shots from absurd distances do not go in', () => {
