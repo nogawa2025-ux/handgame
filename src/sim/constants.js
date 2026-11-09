@@ -85,6 +85,19 @@ export const C = Object.freeze({
   CONTACT_R: 0.75,         // a defender this close in front stops the carrier
   FREE_THROW_AFTER: 1.0,   // held up this long → whistle, free throw
   READ_V: 1.0,             // lateral speed (m/s) that counts as leaning one way
+  FACE_R: 2.6,             // face-off: a defender this close, squarely in front
+  FACE_EXIT: 3.4,          // ...stays a face-off until he is this far / off the line
+  FACE_RANGE: 13,          // only this close to goal
+  FACE_SLOWMO: 0.75,
+  FACE_BREAK_HOLD: 0.2,    // hold the stick to a side this long = break that way
+  FACE_FEINT_WINDOW: 0.2,  // reverse within this = feint
+  // wing dive shot
+  WING_Z: 4.5,             // |z| beyond this, close to goal = a wing position
+  DIVE_RANGE: 9.5,
+  DIVE_TIME: 0.75,
+  DIVE_SPEED: 3.4,
+  DIVE_REACH: 1.2,         // the ball leaves the hand this much further in (mid-flight)
+  DIVE_RELEASE_Y: 1.5,
   // jump shot
   JUMP_TIME: 0.55,
   JUMP_H: 0.6,

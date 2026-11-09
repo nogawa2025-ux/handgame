@@ -132,8 +132,8 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
           const li = first ? (taken = localQ.take()) : { ...taken, pass: false, long: false, shootRelease: false, sub: false };
           const ri = role === 'host' ? (first ? remoteInput : { ...remoteInput, pass: false, long: false, shootRelease: false, sub: false }) : null;
           tutorial?.before(state);
-          // a shot duel plays in slight slow motion (the same for both players: the host sets the pace)
-          step(state, localTeam === 0 ? [li, ri] : [ri, li], DT * (state.duel ? C.DUEL_SLOWMO : 1));
+          // a shot duel / 1-on-1 plays in slight slow motion (the same for both players: the host sets the pace)
+          step(state, localTeam === 0 ? [li, ri] : [ri, li], DT * (state.duel ? C.DUEL_SLOWMO : state.face ? C.FACE_SLOWMO : 1));
           tutorial?.after(state, state.events, li, DT);
           evs.push(...state.events);
           first = false;

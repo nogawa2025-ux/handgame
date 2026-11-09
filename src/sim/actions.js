@@ -130,13 +130,28 @@ export function shoot(s, fromId, aimZ, charge, aimH = 0) {
   const speed = (C.SHOT_MIN + (C.SHOT_MAX - C.SHOT_MIN) * Math.max(0, Math.min(1, charge))) * tired;
   from.facing = Math.atan2(tz - from.z, gx - from.x);
   // close in: take off and throw from the air, carried forward by the run-up
-  const jump = from.role === 'field' && Math.hypot(goalX(from.team) - from.x, from.z) < C.JUMP_SHOT_RANGE;
-  if (jump) {
+  const toGoal = Math.hypot(goalX(from.team) - from.x, from.z);
+  const jump = from.role === 'field' && toGoal < C.JUMP_SHOT_RANGE;
+  // from the wing: dive in over the goal-area line and throw from the air, closer to goal
+  const dive = jump && Math.abs(from.z) > C.WING_Z && toGoal < C.DIVE_RANGE;
+  from.dive = dive;
+  let rx = from.x, rz = from.z;
+  if (dive) {
+    const ix = (goalX(from.team) - from.x) / toGoal, iz = -from.z / toGoal;
+    from.jump = from.jumpT = C.DIVE_TIME;
+    from.vx = ix * C.DIVE_SPEED; from.vz = iz * C.DIVE_SPEED;
+    rx += ix * C.DIVE_REACH; rz += iz * C.DIVE_REACH;
+    from.facing = Math.atan2(tz - rz, gx - rx);
+    s.events.push('dive');
+  } else if (jump) {
     const d = from.team === 0 ? 1 : -1;
-    from.jump = C.JUMP_TIME;
+    from.jump = from.jumpT = C.JUMP_TIME;
     from.vx = d * Math.max(2.2, from.vx * d); from.vz *= 0.6;
   }
-  launch(s, from, gx, tz, ty, speed, jump ? C.JUMP_RELEASE_Y : 1.1);
+  const ox = from.x, oz = from.z;
+  from.x = rx; from.z = rz; // release point (mid-flight for a dive)
+  launch(s, from, gx, tz, ty, speed, dive ? C.DIVE_RELEASE_Y : jump ? C.JUMP_RELEASE_Y : 1.1);
+  from.x = ox; from.z = oz;
   s.penalty = null;
   const b = s.ball;
   b.passTarget = null; b.shot = true; b.shotTeam = from.team; b.shotAge = 0; b.blockChecked = [];

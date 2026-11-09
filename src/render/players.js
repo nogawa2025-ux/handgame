@@ -103,8 +103,11 @@ export async function loadPlayers(scene, players) {
       t += dt;
       state.players.forEach((p, i) => {
         const v = views[i];
-        const jt = p.jump > 0 ? 1 - p.jump / C.JUMP_TIME : 0; // 0→1 through the jump
+        const jt = p.jump > 0 ? Math.max(0, 1 - p.jump / (p.dive ? C.DIVE_TIME : C.JUMP_TIME)) : 0; // 0→1 through the jump
         v.root.position.set(p.x, p.jump > 0 ? 4 * C.JUMP_H * jt * (1 - jt) : 0, p.z);
+        // wing dive: the body tips forward through the flight
+        v.root.rotation.order = 'YXZ';
+        v.root.rotation.x = p.dive && p.jump > 0 ? Math.sin(jt * Math.PI * 0.5) * 1.0 : 0;
         // keeper's read: shift and tilt toward the side it covers, crouch for low balls
         const lz = p.role === 'gk' ? (p.leanZ ?? 0) : 0, lh = p.role === 'gk' ? (p.leanH ?? 0) : 0;
         v.root.position.z += lz * 0.3;
@@ -138,7 +141,7 @@ export async function loadPlayers(scene, players) {
         }
       });
       const c = state.players[state.controlled[localTeam]];
-      ring.visible = arrow.visible = !state.duel; // markers would sit in front of the goal in the duel view
+      ring.visible = arrow.visible = !state.duel && !state.face; // markers would sit in front of the goal in the duel view
       if (c) {
         ring.position.x = c.x; ring.position.z = c.z;
         arrow.position.set(c.x, 2.25 + Math.sin(t * 6) * 0.06, c.z);

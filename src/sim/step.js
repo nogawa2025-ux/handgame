@@ -3,6 +3,7 @@ import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea, goalX } from './ge
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
 import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock, bestPassTarget, stealChance, fromBehind, roll } from './actions.js';
 import { aiTick } from './ai.js';
+import { faceTick, faceStick, faceMoves } from './faceoff.js';
 import { duelTick, stickAim } from './duel.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
@@ -48,6 +49,7 @@ export function step(s, inputs, dt) {
   }
   const prevTeam = possessionTeam(s);
   sevenMeterTick(s, inputs, dt);
+  faceTick(s, inputs);
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
   for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);
   duelTick(s, inputs, dt);
@@ -132,7 +134,7 @@ function humanTick(s, t, inp, dt) {
   if (s.duel && s.duel.team !== t) { s.prevShootHeld[t] = !!inp.shootHeld; return; }
   const attacking = possessionTeam(s) === t;
   if (!attacking && inp.pass) s.controlled[t] = nearestToBall(s, t);
-  if (inp.easy && !attacking) autoSwitch(s, t);
+  if (inp.easy && !attacking && !(s.face && s.face.def === s.controlled[t])) autoSwitch(s, t);
   const me = s.players[s.controlled[t]];
   const holding = b.holder === me.id;
   // a shot feint keeps the shoot button 'spent' until it is released
@@ -140,13 +142,19 @@ function humanTick(s, t, inp, dt) {
     if (!inp.shootHeld || inp.shootRelease) s.feintHold[t] = false;
     inp = { ...inp, shootHeld: false, shootRelease: false };
   }
+  // 1-on-1 face-off: the stick is relative to the duel, and the carrier picks a move
+  const fs = faceStick(s, me, inp);
+  if (fs) {
+    inp = { ...inp, mx: fs.mx, mz: fs.mz };
+    if (holding && me.id === s.face.att && !inp.shootHeld) faceMoves(s, t, me, fs, dt);
+  }
   // step feint: a quick reversal of a strong stick direction while holding the ball
   const mag = Math.hypot(inp.mx, inp.mz);
   const prev = s.lastStick[t];
   if (prev) prev.age += dt;
   if (mag > 0.6) {
     const nx = inp.mx / mag, nz = inp.mz / mag;
-    if (holding && me.role === 'field' && !inp.shootHeld && !s.penalty && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
+    if (!fs && holding && me.role === 'field' && !inp.shootHeld && !s.penalty && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
       stepFeint(s, me.id, nx, nz);
     }
     s.lastStick[t] = { x: nx, z: nz, age: 0 };
@@ -406,7 +414,7 @@ function endOfTime(s) {
 function land(p, dt) {
   if (!(p.jump > 0)) return;
   p.jump = Math.max(0, p.jump - dt);
-  if (p.jump === 0 && p.role === 'field') { clampOutOfGoalArea(p); p.vx *= 0.3; p.vz *= 0.3; }
+  if (p.jump === 0 && p.role === 'field') { clampOutOfGoalArea(p); p.vx *= 0.3; p.vz *= 0.3; p.dive = false; }
 }
 
 function animate(p, dt) {

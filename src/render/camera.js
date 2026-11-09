@@ -4,7 +4,7 @@ import { gkId } from '../sim/state.js';
 
 const attackDir = (team) => (team === 0 ? 1 : -1);
 // duel framing (metres)
-export const VIEW = { KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
+export const VIEW = { FACE_BACK: 3.0, FACE_UP: 2.0, FACE_SIDE: 0.5, FACE_DEF_BACK: 2.6, FACE_DEF_UP: 2.1, KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
 
 /**
  * Broadcast-style camera on the side line. When `mirror` is true the camera sits
@@ -20,6 +20,7 @@ export function createCamera() {
   let first = true;
   let mode = 'broadcast', hold = 0;
   const shooterAt = { x: 0, z: 0 };
+  let faceIds = null; // { att, def } of the 1-on-1 being shown
   return {
     camera,
     get mode() { return mode; },
@@ -34,7 +35,11 @@ export function createCamera() {
       } else if (duelCam && b.shot && b.shotTeam != null && mode !== 'broadcast') {
         want = mode; // keep watching the shot we were already following
       }
-      if (want) { mode = want; hold = 0.8; } else if (hold > 0) { hold -= dt; if (hold <= 0) mode = 'broadcast'; }
+      else if (duelCam && state.face && state.phase === 'play') {
+        want = state.face.team === localTeam ? 'faceAtt' : 'faceDef';
+        faceIds = { att: state.face.att, def: state.face.def };
+      }
+      if (want) { mode = want; hold = want.startsWith('face') ? 0.6 : 0.8; } else if (hold > 0) { hold -= dt; if (hold <= 0) mode = 'broadcast'; }
 
       // ----- broadcast target (also keeps `focus` warm for the way back)
       const narrow = innerWidth / innerHeight < 1.9;
@@ -57,6 +62,19 @@ export function createCamera() {
         tPos.set(shooterAt.x - dx * back + rx * VIEW.SHOOT_SIDE, up, shooterAt.z - dz * back + rz * VIEW.SHOOT_SIDE);
         // aim a little short of the goal so the shooter stays in the lower third
         tLook.set(gx - dx * VIEW.SHOOT_LOOK_SHORT, 0.8, -dz * VIEW.SHOOT_LOOK_SHORT);
+      } else if (mode === 'faceAtt' || mode === 'faceDef') {
+        // 1-on-1: low, behind the attacker (looking at goal) or behind the defender (looking at him)
+        const att = state.players[faceIds.att], def = state.players[faceIds.def];
+        let fx, fz, from, at, back, up;
+        if (mode === 'faceAtt') {
+          const gx = attackDir(localTeam) * C.COURT_HALF_X;
+          fx = gx - att.x; fz = -att.z; from = att; at = def; back = VIEW.FACE_BACK; up = VIEW.FACE_UP;
+        } else {
+          fx = att.x - def.x; fz = att.z - def.z; from = def; at = att; back = VIEW.FACE_DEF_BACK; up = VIEW.FACE_DEF_UP;
+        }
+        const l = Math.hypot(fx, fz) || 1; fx /= l; fz /= l;
+        tPos.set(from.x - fx * back - fz * VIEW.FACE_SIDE, up, from.z - fz * back + fx * VIEW.FACE_SIDE);
+        tLook.set(at.x + fx * 1.5, 1.0, at.z + fz * 1.5);
       } else if (mode === 'keeper') {
         // behind our own net, looking out at the shooter
         // low enough that our own keeper fills the lower half, with the shooter beyond
