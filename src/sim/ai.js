@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { attackDir, teamIds, gkId, giveBall } from './state.js';
 import { inGoalArea } from './geometry.js';
-import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall } from './actions.js';
+import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint } from './actions.js';
 
 // Attack spots in attack space (+x toward the goal being attacked, goal at x=20).
 const ATTACK_SPOTS = [[13.5, -8.3], [13.5, 8.3], [10.5, -4.8], [10.5, 4.8], [9.5, 0], [13.2, 0]];
@@ -12,6 +12,7 @@ const ZONE_R = 6.7;
 const possession = (s) => (s.ball.holder !== null ? s.players[s.ball.holder].team : s.ball.lastTeam);
 
 function moveTo(p, tx, tz, dt, dash = false, mult = 1) {
+  if (p.stun > 0) { movePlayer(p, 0, 0, false, false, dt, C.AI_RUN); return; }
   const dx = tx - p.x, dz = tz - p.z;
   const d = Math.hypot(dx, dz);
   if (d < 0.25) { movePlayer(p, 0, 0, false, false, dt, C.AI_RUN); return; }
@@ -46,11 +47,31 @@ function carrier(s, p, dt) {
     const dx = (q.x - p.x) * d;
     if (dx > -0.5) threat = Math.min(threat, Math.hypot(q.x - p.x, q.z - p.z));
   }
-  if (distGoal < 9.6 && b.holdTime > 0.35) {
+  // only shoot through an open lane (a defender in the line would block it)
+  const laneOpen = s.players.every((q) => {
+    if (q.team === p.team || q.role !== 'field' || q.stun > 0) return true;
+    const ax = gx - p.x, az = -p.z, l2 = ax * ax + az * az;
+    const u = ((q.x - p.x) * ax + (q.z - p.z) * az) / l2;
+    if (u <= 0 || u >= 1) return true;
+    return Math.hypot(p.x + ax * u - q.x, p.z + az * u - q.z) > 0.9;
+  });
+  if (distGoal < 9.6 && b.holdTime > 0.35 && (laneOpen || b.holdTime > 2.2)) {
     const gk = s.players[gkId(1 - p.team)];
     const aim = gk.z > 0 ? -1 : gk.z < 0 ? 1 : (p.z >= 0 ? -1 : 1);
-    shoot(s, p.id, aim * 0.95, 0.75);
+    // vary placement and power like a real shooter (deterministic, from the clock)
+    const r = Math.abs(Math.sin(s.time * 12.9898 + p.id * 78.233) * 43758.5453) % 1;
+    shoot(s, p.id, aim * (0.8 + 0.2 * r), 0.65 + 0.35 * ((r * 7.31) % 1));
     return;
+  }
+  // under pressure from a marker who hasn't been fooled yet: try a step feint first
+  if (threat < 1.7 && b.holdTime > 0.3 && b.holdTime < 1.6 && !p.feinted) {
+    const m = s.players.find((q) => q.team !== p.team && q.role === 'field' && q.fooledCd <= 0 && Math.hypot(q.x - p.x, q.z - p.z) < 1.7);
+    if (m) {
+      const side = (p.z - m.z) >= 0 ? 1 : -1;
+      stepFeint(s, p.id, d * 0.4, side * Math.min(1, (C.COURT_HALF_Z - Math.abs(p.z)) / 2));
+      p.feinted = true;
+      return;
+    }
   }
   if ((threat < 1.7 && b.holdTime > 0.5) || b.holdTime > 2.6) {
     let best = null, bestScore = -Infinity;
@@ -86,7 +107,10 @@ function keeper(s, team, dt, cpu) {
   if (incoming) {
     // save check when the ball reaches the keeper's plane
     if ((b.x - gk.x) * Math.sign(own) >= 0 && Math.abs(b.x - gk.x) < 0.6 && b.y < 2.4) {
-      const reach = Math.min(C.GK_REACH, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE);
+      // a keeper wrong-footed by a shot feint can barely reach the other side
+      const wrongSide = gk.offBalance > 0 && Math.sign(b.z - gk.z) !== Math.sign(gk.lean);
+      const cap = wrongSide ? 0.45 : C.GK_REACH;
+      const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE);
       if (Math.abs(b.z - gk.z) <= reach) {
         giveBall(s, gk.id);
         s.gkTimer[team] = 0;
@@ -103,7 +127,8 @@ function keeper(s, team, dt, cpu) {
   // stand on the ball–goal line, 1m off the goal line
   const tx = own - Math.sign(own) * 1.0;
   const dx = b.x - own, dz = b.z;
-  const tz = Math.max(-C.GOAL_HALF_W * 0.8, Math.min(C.GOAL_HALF_W * 0.8, Math.abs(dx) > 0.1 ? (dz * 1.0) / Math.abs(dx) : 0));
+  let tz = Math.max(-C.GOAL_HALF_W * 0.8, Math.min(C.GOAL_HALF_W * 0.8, Math.abs(dx) > 0.1 ? (dz * 1.0) / Math.abs(dx) : 0));
+  if (gk.offBalance > 0) tz = Math.max(-C.GOAL_HALF_W, Math.min(C.GOAL_HALF_W, tz + gk.lean));
   const ddx = tx - gk.x, ddz = tz - gk.z;
   const d = Math.hypot(ddx, ddz);
   if (d < 0.05) movePlayer(gk, 0, 0, false, false, dt, C.GK_SPEED);

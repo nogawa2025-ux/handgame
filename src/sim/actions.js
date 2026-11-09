@@ -101,6 +101,7 @@ export function tryCatch(s) {
   for (const p of s.players) {
     if (p.id === b.thrower && b.throwTimer > 0) continue;
     if (p.role === 'gk') continue; // keepers catch via save logic / area pickup
+    if (p.stun > 0) continue;       // wrong-footed players can't react to the ball
     const d = Math.hypot(p.x - b.x, p.z - b.z);
     const r = p.id === b.passTarget ? C.CATCH_R * 1.4 : C.CATCH_R;
     if (d < r && d < bestD) { bestD = d; best = p.id; }
@@ -114,7 +115,7 @@ export function tryCatch(s) {
 
 export function trySteal(s, stealerId, bonus = 0) {
   const b = s.ball, st = s.players[stealerId];
-  if (b.holder === null || st.stealCd > 0) return false;
+  if (b.holder === null || st.stealCd > 0 || st.stun > 0) return false;
   const h = s.players[b.holder];
   if (h.team === st.team || h.role !== 'field') return false;
   const dx = h.x - st.x, dz = h.z - st.z;
@@ -135,4 +136,41 @@ export function nearestToBall(s, team) {
     if (d < bestD) { bestD = d; best = id; }
   }
   return best;
+}
+
+/** Opponent field players that bite on a feint by `p`: close, not just fooled. */
+function fool(s, p) {
+  let n = 0;
+  for (const q of s.players) {
+    if (q.team === p.team || q.role !== 'field' || q.fooledCd > 0) continue;
+    if (Math.hypot(q.x - p.x, q.z - p.z) > C.FEINT_RANGE) continue;
+    q.stun = C.FEINT_STUN; q.fooledCd = C.FEINT_IMMUNE; q.vx *= 0.3; q.vz *= 0.3;
+    n++;
+  }
+  return n;
+}
+
+/** Shot feint: cancel a wind-up. Fools defenders/keeper only if the wind-up was believable. */
+export function shotFeint(s, id, aimZ, charge) {
+  const p = s.players[id];
+  s.events.push('feint');
+  p.anim = 'shoot'; p.animTimer = 0.2;
+  if (charge < C.FEINT_MIN_CHARGE) return;
+  fool(s, p);
+  const gk = s.players[p.team === 0 ? 7 : 0];
+  if (Math.hypot(goalX(p.team) - p.x, p.z) <= C.GK_FEINT_RANGE) {
+    gk.offBalance = C.GK_OFF_BALANCE;
+    gk.lean = (aimZ >= 0 ? 1 : -1) * 0.9;
+  }
+}
+
+/** Step feint: sharp change of direction with a burst; wrong-foots a close marker. */
+export function stepFeint(s, id, dx, dz) {
+  const p = s.players[id];
+  const l = Math.hypot(dx, dz) || 1;
+  const v = C.DASH * C.STEP_BOOST;
+  p.vx = (dx / l) * v; p.vz = (dz / l) * v;
+  p.facing = Math.atan2(dz, dx);
+  fool(s, p);
+  s.events.push('feint');
 }

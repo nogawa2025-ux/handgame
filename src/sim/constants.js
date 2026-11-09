@@ -33,4 +33,12 @@ export const C = Object.freeze({
   COUNTDOWN: 3,
   GRAVITY: 9.8,
   SNAPSHOT_HZ: 20,
+  FEINT_STUN: 0.45,      // how long a fooled defender is wrong-footed
+  FEINT_IMMUNE: 1.0,     // a fooled defender reads the next feint for this long
+  FEINT_RANGE: 2.5,      // only defenders this close bite on a feint
+  FEINT_MIN_CHARGE: 0.25, // shot feint needs a believable wind-up
+  STEP_BOOST: 1.15,      // burst after a step feint, × DASH
+  STEP_WINDOW: 0.25,     // stick reversal within this time counts as a step feint
+  GK_FEINT_RANGE: 13,    // keeper reacts to shot feints from this distance
+  GK_OFF_BALANCE: 0.7,
 });

@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { checkGoal, checkOut, inGoalArea } from './geometry.js';
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
-import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall } from './actions.js';
+import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint } from './actions.js';
 import { aiTick } from './ai.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
@@ -14,6 +14,8 @@ export function step(s, inputs, dt) {
   s.events = [];
   s.prevShootHeld ??= [false, false];
   s.stealBonus ??= [0, 0];
+  s.feintHold ??= [false, false];
+  s.lastStick ??= [null, null];
   if (s.phase === 'ended') return;
 
   if (s.phase === 'countdown' || s.phase === 'restart' || s.phase === 'goal') {
@@ -36,7 +38,13 @@ export function step(s, inputs, dt) {
   const prevTeam = possessionTeam(s);
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
   for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);
-  for (const p of s.players) { p.stealCd = Math.max(0, p.stealCd - dt); animate(p, dt); }
+  for (const p of s.players) {
+    p.stealCd = Math.max(0, p.stealCd - dt);
+    p.stun = Math.max(0, (p.stun ?? 0) - dt);
+    p.fooledCd = Math.max(0, (p.fooledCd ?? 0) - dt);
+    p.offBalance = Math.max(0, (p.offBalance ?? 0) - dt);
+    animate(p, dt);
+  }
 
   const b = s.ball;
   if (b.holder !== null) {
@@ -79,7 +87,24 @@ function humanTick(s, t, inp, dt) {
   if (!attacking && inp.pass) s.controlled[t] = nearestToBall(s, t);
   const me = s.players[s.controlled[t]];
   const holding = b.holder === me.id;
-  movePlayer(me, inp.mx, inp.mz, inp.dash, holding && b.holdTime > C.HOLD_LIMIT, dt);
+  // a shot feint keeps the shoot button 'spent' until it is released
+  if (s.feintHold[t]) {
+    if (!inp.shootHeld || inp.shootRelease) s.feintHold[t] = false;
+    inp = { ...inp, shootHeld: false, shootRelease: false };
+  }
+  // step feint: a quick reversal of a strong stick direction while holding the ball
+  const mag = Math.hypot(inp.mx, inp.mz);
+  const prev = s.lastStick[t];
+  if (prev) prev.age += dt;
+  if (mag > 0.6) {
+    const nx = inp.mx / mag, nz = inp.mz / mag;
+    if (holding && me.role === 'field' && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
+      stepFeint(s, me.id, nx, nz);
+    }
+    s.lastStick[t] = { x: nx, z: nz, age: 0 };
+  }
+  if (me.stun > 0) movePlayer(me, 0, 0, false, false, dt);
+  else movePlayer(me, inp.mx, inp.mz, inp.dash, holding && b.holdTime > C.HOLD_LIMIT, dt);
 
   if (b.holder !== null && b.holder === gkId(t)) {
     // own keeper holding the ball: pass buttons make the keeper throw
@@ -90,7 +115,11 @@ function humanTick(s, t, inp, dt) {
       if (target !== null) throwBall(s, b.holder, target, inp.long ? C.LONG_PASS_SPEED : C.PASS_SPEED);
     }
   } else if (holding) {
-    if (inp.pass) {
+    if (inp.pass && inp.shootHeld && s.shootCharge[t] > 0) {
+      shotFeint(s, me.id, inp.mz, s.shootCharge[t]);
+      s.shootCharge[t] = 0;
+      s.feintHold[t] = true;
+    } else if (inp.pass) {
       const target = pickPassTarget(s, me.id, inp.mx, inp.mz);
       if (target !== null) throwBall(s, me.id, target, C.PASS_SPEED);
     } else if (inp.long) {

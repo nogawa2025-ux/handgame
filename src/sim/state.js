@@ -13,7 +13,7 @@ function makePlayer(id) {
   return {
     id, team, role: id % 7 === 0 ? 'gk' : 'field',
     x: 0, z: 0, vx: 0, vz: 0, facing: team === 0 ? 0 : Math.PI,
-    stamina: 1, anim: 'idle', animTimer: 0, stealCd: 0,
+    stamina: 1, anim: 'idle', animTimer: 0, stealCd: 0, stun: 0, fooledCd: 0, offBalance: 0, lean: 0,
   };
 }
 
@@ -60,5 +60,6 @@ export function giveBall(s, id) {
   const b = s.ball;
   b.holder = id; b.holdTime = 0; b.lastTeam = p.team; b.passTarget = null;
   b.shot = false; b.shotTeam = null;
+  p.feinted = false;
   b.x = p.x; b.z = p.z; b.y = 1; b.vx = b.vy = b.vz = 0;
 }
