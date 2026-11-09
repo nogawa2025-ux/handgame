@@ -1,0 +1,214 @@
+import { C } from './constants.js';
+import { checkGoal, checkOut, inGoalArea } from './geometry.js';
+import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
+import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall } from './actions.js';
+import { aiTick } from './ai.js';
+
+/** Team currently "in possession" (holder's team, or last touch while loose). */
+export const possessionTeam = (s) => (s.ball.holder !== null ? s.players[s.ball.holder].team : s.ball.lastTeam);
+
+/**
+ * Advance the match by dt. inputs[t] == null → team t is CPU-controlled.
+ */
+export function step(s, inputs, dt) {
+  s.events = [];
+  s.prevShootHeld ??= [false, false];
+  s.stealBonus ??= [0, 0];
+  if (s.phase === 'ended') return;
+
+  if (s.phase === 'countdown' || s.phase === 'restart' || s.phase === 'goal') {
+    s.phaseTimer -= dt;
+    if (s.phase === 'goal') ballPhysics(s, dt, false);
+    for (const p of s.players) { p.vx *= 0.9; p.vz *= 0.9; animate(p, dt); }
+    if (s.phaseTimer <= 0) {
+      if (s.phase === 'goal') {
+        resetForThrowOff(s, s.concede);
+        s.phase = 'restart'; s.phaseTimer = C.RESTART_PAUSE;
+      } else {
+        s.phase = 'play';
+        s.events.push('whistle');
+      }
+    }
+    return;
+  }
+
+  // ---- play ----
+  const prevTeam = possessionTeam(s);
+  for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
+  for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);
+  for (const p of s.players) { p.stealCd = Math.max(0, p.stealCd - dt); animate(p, dt); }
+
+  const b = s.ball;
+  if (b.holder !== null) {
+    const h = s.players[b.holder];
+    b.holdTime += dt;
+    b.x = h.x + Math.cos(h.facing) * 0.35;
+    b.z = h.z + Math.sin(h.facing) * 0.35;
+    b.y = b.holdTime > C.HOLD_LIMIT && h.role === 'field' ? 0.3 + Math.abs(Math.sin(b.holdTime * 9)) * 0.7 : 1;
+    b.vx = h.vx; b.vz = h.vz; b.vy = 0;
+  } else {
+    if (ballPhysics(s, dt, true)) return;
+    tryCatch(s);
+    keeperPickup(s, dt);
+  }
+
+  // auto-switch the human defender when possession changes
+  const nowTeam = possessionTeam(s);
+  if (nowTeam !== prevTeam) {
+    const def = 1 - nowTeam;
+    if (inputs[def] != null) s.controlled[def] = nearestToBall(s, def);
+  }
+  syncControlled(s, inputs);
+
+  s.time -= dt;
+  if (s.time <= 0) endOfTime(s);
+}
+
+function humanTick(s, t, inp, dt) {
+  if (inp == null) return;
+  const b = s.ball;
+  const attacking = possessionTeam(s) === t;
+  if (!attacking && inp.pass) s.controlled[t] = nearestToBall(s, t);
+  const me = s.players[s.controlled[t]];
+  const holding = b.holder === me.id;
+  movePlayer(me, inp.mx, inp.mz, inp.dash, holding && b.holdTime > C.HOLD_LIMIT, dt);
+
+  if (b.holder !== null && b.holder === gkId(t)) {
+    // own keeper holding the ball: pass buttons make the keeper throw
+    if (inp.pass || inp.long) {
+      const target = inp.long
+        ? pickLongTarget(s, b.holder)
+        : pickPassTarget(s, b.holder, inp.mx, inp.mz) ?? pickLongTarget(s, b.holder);
+      if (target !== null) throwBall(s, b.holder, target, inp.long ? C.LONG_PASS_SPEED : C.PASS_SPEED);
+    }
+  } else if (holding) {
+    if (inp.pass) {
+      const target = pickPassTarget(s, me.id, inp.mx, inp.mz);
+      if (target !== null) throwBall(s, me.id, target, C.PASS_SPEED);
+    } else if (inp.long) {
+      const target = pickLongTarget(s, me.id);
+      if (target !== null) throwBall(s, me.id, target, C.LONG_PASS_SPEED);
+    } else if (inp.shootHeld) {
+      s.shootCharge[t] = Math.min(1, s.shootCharge[t] + dt / C.SHOT_CHARGE_TIME);
+    }
+    if (inp.shootRelease && b.holder === me.id) {
+      shoot(s, me.id, inp.mz, s.shootCharge[t]);
+      s.shootCharge[t] = 0;
+    }
+  } else {
+    s.shootCharge[t] = 0;
+    const pressed = (inp.shootHeld || inp.shootRelease) && !s.prevShootHeld[t];
+    if (!attacking && pressed) trySteal(s, me.id, s.stealBonus[t]);
+  }
+  s.prevShootHeld[t] = !!inp.shootHeld;
+}
+
+/** Keep each controlled player sensible: ball holder on attack, receiver of a pass. */
+function syncControlled(s, inputs) {
+  const b = s.ball;
+  for (const t of [0, 1]) {
+    const h = b.holder !== null ? s.players[b.holder] : null;
+    if (inputs[t] == null) {
+      s.controlled[t] = h && h.team === t && h.role === 'field' ? h.id : nearestToBall(s, t);
+      continue;
+    }
+    if (h) {
+      if (h.team === t && h.role === 'field') s.controlled[t] = h.id;
+    } else if (b.passTarget !== null) {
+      const r = s.players[b.passTarget];
+      if (r.team === t && r.role === 'field') s.controlled[t] = r.id;
+    }
+    if (s.players[s.controlled[t]].role === 'gk') s.controlled[t] = nearestToBall(s, t);
+  }
+}
+
+/** Returns true if the tick ended in a goal/out restart. */
+function ballPhysics(s, dt, rules) {
+  const b = s.ball;
+  if (b.holder !== null) return false;
+  b.throwTimer = Math.max(0, (b.throwTimer ?? 0) - dt);
+  if (b.shot) b.shotAge = (b.shotAge ?? 0) + dt;
+  b.vy -= C.GRAVITY * dt;
+  b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+  if (b.y < 0.11) {
+    b.y = 0.11;
+    b.vy = Math.abs(b.vy) > 1.5 ? -b.vy * 0.55 : 0;
+    const f = Math.max(0, 1 - 1.2 * dt);
+    b.vx *= f; b.vz *= f;
+  }
+  if (b.shot && b.shotAge > 1.2) b.shot = false;
+  if (!rules) {
+    // during the goal celebration keep the ball in the net
+    if (Math.abs(b.x) > 21) { b.x = Math.sign(b.x) * 21; b.vx = 0; }
+    return false;
+  }
+  const scorer = checkGoal(b);
+  if (scorer !== null) {
+    s.score[scorer]++;
+    s.events.push('goal:' + scorer);
+    if (s.overtime) { s.phase = 'ended'; s.winner = scorer; s.events.push('end'); return true; }
+    s.phase = 'goal'; s.phaseTimer = C.GOAL_PAUSE; s.concede = 1 - scorer;
+    return true;
+  }
+  const out = checkOut(b);
+  if (out) { restartAfterOut(s, out); return true; }
+  return false;
+}
+
+function restartAfterOut(s, out) {
+  const b = s.ball;
+  const team = 1 - b.lastTeam;
+  s.events.push('whistle');
+  let spot = out;
+  if (out.type === 'goalline') {
+    const side = Math.sign(out.x);
+    const defending = side === 1 ? 1 : 0; // team that defends this end
+    if (b.lastTeam !== defending) { giveBall(s, gkId(defending)); s.gkTimer[defending] = 0; setRestart(s); return; }
+    spot = { x: side * 19, z: (Math.sign(out.z) || 1) * 9.5 };
+  }
+  const id = nearestToBall(s, team);
+  const p = s.players[id];
+  p.x = Math.max(-19.5, Math.min(19.5, spot.x));
+  p.z = Math.max(-9.7, Math.min(9.7, spot.z));
+  p.vx = p.vz = 0;
+  p.facing = Math.atan2(-Math.sign(p.z), 0);
+  giveBall(s, id);
+  setRestart(s);
+}
+
+function setRestart(s) {
+  s.phase = 'restart'; s.phaseTimer = C.RESTART_PAUSE; s.shootCharge = [0, 0];
+}
+
+function keeperPickup(s, dt) {
+  const b = s.ball;
+  if (b.holder !== null) return;
+  const speed = Math.hypot(b.vx, b.vz);
+  for (const t of [0, 1]) {
+    const ownSide = -attackDir(t);
+    if (!inGoalArea(b.x, b.z, ownSide) || b.y > 2 || speed > 4) continue;
+    const gk = s.players[gkId(t)];
+    const d = Math.hypot(gk.x - b.x, gk.z - b.z);
+    if (d < 1.0) { giveBall(s, gk.id); s.gkTimer[t] = 0; return; }
+    movePlayer(gk, (b.x - gk.x) / d, (b.z - gk.z) / d, false, false, dt, C.GK_SPEED);
+  }
+}
+
+function endOfTime(s) {
+  s.time = 0;
+  if (!s.overtime && s.score[0] === s.score[1]) {
+    s.overtime = true; s.time = C.OVERTIME;
+    s.events.push('overtime');
+    resetForThrowOff(s, 0);
+    setRestart(s);
+    return;
+  }
+  s.phase = 'ended';
+  s.winner = s.score[0] > s.score[1] ? 0 : s.score[1] > s.score[0] ? 1 : 'draw';
+  s.events.push('end');
+}
+
+function animate(p, dt) {
+  if (p.animTimer > 0) { p.animTimer -= dt; return; }
+  p.anim = Math.hypot(p.vx, p.vz) > 0.6 ? 'run' : 'idle';
+}
