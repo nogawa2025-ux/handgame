@@ -68,6 +68,13 @@ function goal(side) {
   net.position.set(side * 0.45, h / 2, 0);
   grp.add(net);
   grp.position.x = side * C.COURT_HALF_X;
+  // see-through frame when the keeper camera sits right behind this goal
+  for (const m of [postMat, redMat]) m.transparent = true;
+  grp.userData.fade = (on) => {
+    postMat.opacity = redMat.opacity = on ? 0.18 : 1;
+    net.material.opacity = on ? 0.08 : 0.25;
+    for (const m of [postMat, redMat]) m.depthWrite = !on;
+  };
   return grp;
 }
 
@@ -97,7 +104,8 @@ export function createScene(canvas) {
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
-  scene.add(goal(1), goal(-1));
+  const goals = { 1: goal(1), [-1]: goal(-1) };
+  scene.add(goals[1], goals[-1]);
 
   // simple stands
   const standMat = new THREE.MeshStandardMaterial({ color: 0x24364d, roughness: 0.9 });
@@ -113,5 +121,7 @@ export function createScene(canvas) {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
-  return { renderer, scene, resize };
+  /** Fade the goal frame on `side` (-1 / 1), or none (0). */
+  const fadeGoal = (side) => { goals[1].userData.fade(side === 1); goals[-1].userData.fade(side === -1); };
+  return { renderer, scene, resize, fadeGoal };
 }

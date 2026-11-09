@@ -17,7 +17,7 @@ const DT = 1 / 60;
 const $ = (id) => document.getElementById(id);
 
 const canvas = $('game');
-const { renderer, scene, resize } = createScene(canvas);
+const { renderer, scene, resize, fadeGoal } = createScene(canvas);
 const cam = createCamera();
 const hud = createHud();
 const controls = createControls($('controls'));
@@ -300,6 +300,8 @@ function loop(now) {
   }
   if (views) views.update(shown, dt, localTeam, match?.aim);
   cam.follow(shown, dt, mirror, localTeam, !!match);
+  // keeper view looks through our own goal frame: make it see-through
+  fadeGoal(cam.mode === 'keeper' ? (localTeam === 0 ? -1 : 1) : 0);
   renderer.render(scene, cam.camera);
   requestAnimationFrame(loop);
 }

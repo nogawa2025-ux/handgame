@@ -144,7 +144,8 @@ html, body {
 }
 
 #duelhint {
-  position: absolute; left: 50%; bottom: calc(84px + var(--safe-b)); transform: translateX(-50%);
+  /* where the minimap sits (it's hidden in a duel), clear of the keeper and shooter */
+  position: absolute; left: 50%; bottom: calc(8px + var(--safe-b)); transform: translateX(-50%);
   background: rgba(10, 18, 30, .78); color: #fff; font-weight: 800; font-size: 14px; padding: 4px 12px; border-radius: 10px; white-space: nowrap;
 }
 body.duel #minimap { display: none; }

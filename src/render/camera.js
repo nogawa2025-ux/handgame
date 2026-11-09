@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { C } from '../sim/constants.js';
+import { gkId } from '../sim/state.js';
 
 const attackDir = (team) => (team === 0 ? 1 : -1);
+// duel framing (metres)
+export const VIEW = { KEEPER_BACK: 3.6, KEEPER_UP: 2.4, SHOOT_BACK: 3.4, SHOOT_UP: 2.6, SHOOT_SIDE: 1.1, SHOOT_LOOK_SHORT: 2.0 };
 
 /**
  * Broadcast-style camera on the side line. When `mirror` is true the camera sits
@@ -48,16 +51,20 @@ export function createCamera() {
         const dist = Math.hypot(dx, dz) || 1;
         dx /= dist; dz /= dist;
         const long = dist > 10.5;
-        const back = long ? 4.4 : 3.4, up = long ? 3.4 : 2.9;
+        const back = long ? 4.4 : VIEW.SHOOT_BACK, up = long ? 3.4 : VIEW.SHOOT_UP;
         // over the throwing shoulder (right side of the run), so the shooter doesn't hide the goal
         const rx = -dz, rz = dx; // right-hand side of the run (looking toward the goal)
-        tPos.set(shooterAt.x - dx * back + rx * 0.8, up, shooterAt.z - dz * back + rz * 0.8);
-        tLook.set(gx, 0.8, 0);
+        tPos.set(shooterAt.x - dx * back + rx * VIEW.SHOOT_SIDE, up, shooterAt.z - dz * back + rz * VIEW.SHOOT_SIDE);
+        // aim a little short of the goal so the shooter stays in the lower third
+        tLook.set(gx - dx * VIEW.SHOOT_LOOK_SHORT, 0.8, -dz * VIEW.SHOOT_LOOK_SHORT);
       } else if (mode === 'keeper') {
         // behind our own net, looking out at the shooter
-        const own = -attackDir(localTeam) * C.COURT_HALF_X;
-        tPos.set(own - attackDir(localTeam) * 3.0, 3.1, shooterAt.z * 0.15);
-        tLook.set(shooterAt.x, 1.0, shooterAt.z);
+        // low enough that our own keeper fills the lower half, with the shooter beyond
+        const dir = attackDir(localTeam);
+        const own = -dir * C.COURT_HALF_X;
+        const gk = state.players[gkId(localTeam)];
+        tPos.set(own - dir * VIEW.KEEPER_BACK, VIEW.KEEPER_UP, shooterAt.z * 0.2);
+        tLook.set(gk.x + (shooterAt.x - gk.x) * 0.45, 0.9, gk.z + (shooterAt.z - gk.z) * 0.45);
       } else {
         const side = mirror ? -1 : 1;
         const dist = narrow ? 15 : 13.5;
