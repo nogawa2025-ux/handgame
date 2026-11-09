@@ -109,3 +109,20 @@ html, body {
 @keyframes turn { 50% { transform: rotate(-90deg); } }
 
 #loading { z-index: 40; font-size: 20px; }
+
+/* substitution button (top right) */
+#btn-sub {
+  width: auto; height: 34px; padding: 0 14px; border-radius: 17px; font-size: 14px;
+  top: max(8px, env(safe-area-inset-top)); right: calc(14px + var(--safe-r)); background: rgba(36, 54, 77, .9);
+}
+
+/* stamina panel (top left): one bar per court player */
+#stamina {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); left: calc(12px + var(--safe-l));
+  display: flex; gap: 5px; background: var(--panel); padding: 5px 7px; border-radius: 9px;
+}
+#stamina .p { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 800; color: var(--muted); }
+#stamina .p.on { color: var(--accent); }
+#stamina .bar { width: 8px; height: 28px; background: rgba(255,255,255,.15); border-radius: 3px; position: relative; overflow: hidden; }
+#stamina .bar i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 3px; }
+#banner.small { font-size: 26px; top: 22%; }

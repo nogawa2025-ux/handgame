@@ -7,12 +7,16 @@ const ACCEL = 10; // 1/s, velocity smoothing rate
 export function movePlayer(p, dirX, dirZ, dash, dribbling, dt, maxSpeed = C.RUN) {
   let len = Math.hypot(dirX, dirZ);
   if (len > 1) { dirX /= len; dirZ /= len; len = 1; }
-  const dashing = dash && p.stamina > 0 && len > 0.1;
-  let speed = dashing ? C.DASH : maxSpeed;
+  const st = p.stamina ?? 1;
+  const dashing = dash && st > C.STAMINA_MIN_DASH && len > 0.1;
+  let speed = (dashing ? C.DASH : maxSpeed) * (1 - C.TIRED_SLOWDOWN * (1 - st));
   if (dribbling) speed *= C.DRIBBLE_MULT;
-  p.stamina = dashing
-    ? Math.max(0, p.stamina - C.STAMINA_DRAIN * dt)
-    : Math.min(1, p.stamina + C.STAMINA_REGEN * dt);
+  const cur = Math.hypot(p.vx, p.vz);
+  if (cur < 1.5 && len < 0.1) p.stamina = Math.min(1, st + C.STAMINA_REST * dt);
+  else {
+    const r = cur / C.RUN;
+    p.stamina = Math.max(0, st - (C.STAMINA_BASE + C.STAMINA_RUN * r * r + (dashing ? C.STAMINA_DASH : 0)) * dt);
+  }
   const k = Math.min(1, ACCEL * dt);
   p.vx += (dirX * speed - p.vx) * k;
   p.vz += (dirZ * speed - p.vz) * k;
@@ -85,7 +89,8 @@ export function shoot(s, fromId, aimZ, charge) {
   const from = s.players[fromId];
   const gx = goalX(from.team) + (from.team === 0 ? 0.6 : -0.6); // aim slightly behind the line
   const tz = Math.max(-1, Math.min(1, aimZ)) * C.GOAL_HALF_W * 0.9;
-  const speed = C.SHOT_MIN + (C.SHOT_MAX - C.SHOT_MIN) * Math.max(0, Math.min(1, charge));
+  const tired = 0.85 + 0.15 * (from.stamina ?? 1);
+  const speed = (C.SHOT_MIN + (C.SHOT_MAX - C.SHOT_MIN) * Math.max(0, Math.min(1, charge))) * tired;
   from.facing = Math.atan2(tz - from.z, gx - from.x);
   launch(s, from, gx, tz, 0.9 + 0.6 * Math.abs(aimZ), speed);
   const b = s.ball;
@@ -102,6 +107,7 @@ export function tryCatch(s) {
     if (p.id === b.thrower && b.throwTimer > 0) continue;
     if (p.role === 'gk') continue; // keepers catch via save logic / area pickup
     if (p.stun > 0) continue;       // wrong-footed players can't react to the ball
+    if (b.shot && p.team === b.shotTeam) continue; // teammates never stop their own shot
     const d = Math.hypot(p.x - b.x, p.z - b.z);
     const r = p.id === b.passTarget ? C.CATCH_R * 1.4 : C.CATCH_R;
     if (d < r && d < bestD) { bestD = d; best = p.id; }
@@ -173,4 +179,27 @@ export function stepFeint(s, id, dx, dz) {
   p.facing = Math.atan2(dz, dx);
   fool(s, p);
   s.events.push('feint');
+}
+
+
+/**
+ * Flying substitution: the most tired on-court field player (never the ball holder)
+ * swaps with the freshest bench player. Returns true if a swap happened.
+ */
+export function substitute(s, team, minGain = 0.05) {
+  const bench = s.bench[team];
+  let out = null;
+  for (const p of s.players) {
+    if (p.team !== team || p.role !== 'field' || p.id === s.ball.holder) continue;
+    if (!out || p.stamina < out.stamina) out = p;
+  }
+  let inn = null;
+  for (const b of bench) if (!inn || b.stamina > inn.stamina) inn = b;
+  if (!out || !inn || inn.stamina < out.stamina + minGain) return false;
+  const outNum = out.num, outSt = out.stamina;
+  out.num = inn.num; out.stamina = inn.stamina;
+  inn.num = outNum; inn.stamina = outSt;
+  out.stun = 0;
+  s.events.push('sub:' + team + ':' + outNum + ':' + out.num);
+  return true;
 }

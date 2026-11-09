@@ -19,6 +19,8 @@ export function encodeSnapshot(s, ack = 0) {
     t: r2(s.time), ph: PHASES.indexOf(s.phase), pt: r2(s.phaseTimer), sc: s.score.slice(), c: s.controlled.slice(),
     ch: s.shootCharge.map(r2), ot: s.overtime ? 1 : 0, w: s.winner,
     st: s.players.map((q) => r2(q.stamina)), ack,
+    nm: s.players.map((q) => q.num),
+    bn: s.bench.map((b) => b.map((x) => [x.num, r2(x.stamina)])),
   };
 }
 
@@ -36,6 +38,8 @@ export function decodeSnapshot(o, into = createMatchState()) {
   into.score = o.sc.slice(); into.controlled = o.c.slice(); into.shootCharge = o.ch.slice();
   into.overtime = !!o.ot; into.winner = o.w; into.ack = o.ack ?? 0;
   if (o.st) into.players.forEach((q, i) => { q.stamina = o.st[i]; });
+  if (o.nm) into.players.forEach((q, i) => { q.num = o.nm[i]; });
+  if (o.bn) into.bench = o.bn.map((b) => b.map(([num, stamina]) => ({ num, stamina })));
   return into;
 }
 
@@ -145,7 +149,7 @@ export function createGuestSync(conn, initial, team = 1) {
   const pred = new Predictor();
   let events = [], seq = 0, lastSnap = 0;
   let latest = initial;
-  let pending = { pass: false, long: false, shootRelease: false };
+  let pending = { pass: false, long: false, shootRelease: false, sub: false };
   const offs = [conn.on('snap', (m) => {
     if (m.seq <= lastSnap) return;
     lastSnap = m.seq;
@@ -157,9 +161,9 @@ export function createGuestSync(conn, initial, team = 1) {
   let lastRecv = now();
   return {
     sendInput(inp) {
-      pending.pass ||= inp.pass; pending.long ||= inp.long; pending.shootRelease ||= inp.shootRelease;
+      pending.pass ||= inp.pass; pending.long ||= inp.long; pending.shootRelease ||= inp.shootRelease; pending.sub ||= inp.sub;
       conn.send({ t: 'input', seq: ++seq, i: { ...inp, ...pending } });
-      pending = { pass: false, long: false, shootRelease: false };
+      pending = { pass: false, long: false, shootRelease: false, sub: false };
       return seq;
     },
     update(dt, inp) {

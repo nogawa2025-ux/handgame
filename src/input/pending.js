@@ -1,6 +1,6 @@
 // Accumulates local input across render frames until a sim step consumes it,
 // so taps on 90/120 Hz displays are never dropped.
-const EDGES = ['pass', 'long', 'shootRelease'];
+const EDGES = ['pass', 'long', 'shootRelease', 'sub'];
 
 export class PendingInput {
   constructor() { this.cur = null; }
@@ -12,7 +12,7 @@ export class PendingInput {
   }
   /** Input for the next sim step; edges are cleared after being taken once. */
   take() {
-    const out = this.cur ? { ...this.cur } : { mx: 0, mz: 0, dash: false, pass: false, long: false, shootHeld: false, shootRelease: false };
+    const out = this.cur ? { ...this.cur } : { mx: 0, mz: 0, dash: false, pass: false, long: false, shootHeld: false, shootRelease: false, sub: false };
     if (this.cur) for (const k of EDGES) this.cur[k] = false;
     return out;
   }

@@ -10,8 +10,9 @@ export const gkId = (team) => (team === 0 ? 0 : 7);
 
 function makePlayer(id) {
   const team = id < 7 ? 0 : 1;
+  const num = (id % 7) + 1; // GK #1, court players #2–#7
   return {
-    id, team, role: id % 7 === 0 ? 'gk' : 'field',
+    id, team, num, role: id % 7 === 0 ? 'gk' : 'field',
     x: 0, z: 0, vx: 0, vz: 0, facing: team === 0 ? 0 : Math.PI,
     stamina: 1, anim: 'idle', animTimer: 0, stealCd: 0, stun: 0, fooledCd: 0, offBalance: 0, lean: 0,
   };
@@ -29,6 +30,8 @@ export function createMatchState() {
     events: [],
     restartTeam: 0,
     gkTimer: [0, 0],
+    // bench: #8–#13 for each team
+    bench: [0, 1].map(() => Array.from({ length: 6 }, (_, i) => ({ num: 8 + i, stamina: 1 }))),
   };
   resetForThrowOff(s, 0);
   return s;

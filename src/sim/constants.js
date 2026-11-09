@@ -24,10 +24,17 @@ export const C = Object.freeze({
   STEAL_COOLDOWN: 0.6,
   CATCH_R: 0.7,
   GK_REACH: 1.1,
-  GK_DIVE: 3,
+  GK_DIVE: 2.6,
   GK_REACT: 0.18,
-  STAMINA_DRAIN: 0.25,
-  STAMINA_REGEN: 0.1,
+  // stamina (per second): moving costs a little, dashing a lot, standing/bench recovers
+  STAMINA_BASE: 0.0013,
+  STAMINA_RUN: 0.0022,   // × (speed / RUN)^2
+  STAMINA_DASH: 0.03,
+  STAMINA_REST: 0.006,
+  STAMINA_BENCH: 0.03,
+  STAMINA_MIN_DASH: 0.1,
+  TIRED_SLOWDOWN: 0.25,  // speed × (1 - 0.25 × (1 - stamina))
+  CPU_SUB_BELOW: 0.4,
   GOAL_PAUSE: 2,
   RESTART_PAUSE: 1,
   COUNTDOWN: 3,

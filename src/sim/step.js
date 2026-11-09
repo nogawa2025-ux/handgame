@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { checkGoal, checkOut, inGoalArea } from './geometry.js';
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
-import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint } from './actions.js';
+import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute } from './actions.js';
 import { aiTick } from './ai.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
@@ -17,6 +17,7 @@ export function step(s, inputs, dt) {
   s.feintHold ??= [false, false];
   s.lastStick ??= [null, null];
   if (s.phase === 'ended') return;
+  for (const bench of s.bench ?? []) for (const b of bench) b.stamina = Math.min(1, b.stamina + C.STAMINA_BENCH * dt);
 
   if (s.phase === 'countdown' || s.phase === 'restart' || s.phase === 'goal') {
     s.phaseTimer -= dt;
@@ -35,6 +36,10 @@ export function step(s, inputs, dt) {
   }
 
   // ---- play ----
+  for (const t of [0, 1]) {
+    if (inputs[t] != null) { if (inputs[t].sub) substitute(s, t); }
+    else if (s.players.some((p) => p.team === t && p.role === 'field' && p.id !== s.ball.holder && p.stamina < C.CPU_SUB_BELOW)) substitute(s, t, 0.35);
+  }
   const prevTeam = possessionTeam(s);
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
   for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);

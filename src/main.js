@@ -27,13 +27,13 @@ function onResize() { resize(cam.camera); }
 addEventListener('resize', onResize);
 onResize();
 
-const neutral = () => ({ mx: 0, mz: 0, dash: false, pass: false, long: false, shootHeld: false, shootRelease: false });
+const neutral = () => ({ mx: 0, mz: 0, dash: false, pass: false, long: false, shootHeld: false, shootRelease: false, sub: false });
 
 /** Merge edge events so none are lost when several inputs collapse into one tick. */
 export function mergeInput(a, b) {
   return {
     mx: b.mx, mz: b.mz, dash: b.dash, shootHeld: b.shootHeld,
-    pass: a.pass || b.pass, long: a.long || b.long, shootRelease: a.shootRelease || b.shootRelease,
+    pass: a.pass || b.pass, long: a.long || b.long, shootRelease: a.shootRelease || b.shootRelease, sub: a.sub || b.sub,
   };
 }
 
@@ -70,6 +70,11 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
       } else if (e === 'save') hud.flash('セーブ！', false, 0.9);
       else if (e === 'steal' || e === 'intercept') { /* subtle: no banner */ }
       else if (e === 'overtime') hud.flash('延長戦！', true, 2);
+      else if (e.startsWith('sub:')) {
+        const [, t, out, inn] = e.split(':');
+        const mine = Number(t) === localTeam;
+        hud.flash(`${mine ? '' : '相手 '}交代 #${out}→#${inn}`, mine, 1.2, true);
+      }
     }
   };
 
@@ -97,14 +102,14 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
         let first = true, taken = null;
         const evs = [];
         while (acc >= DT) {
-          const li = first ? (taken = localQ.take()) : { ...taken, pass: false, long: false, shootRelease: false };
-          const ri = role === 'host' ? (first ? remoteInput : { ...remoteInput, pass: false, long: false, shootRelease: false }) : null;
+          const li = first ? (taken = localQ.take()) : { ...taken, pass: false, long: false, shootRelease: false, sub: false };
+          const ri = role === 'host' ? (first ? remoteInput : { ...remoteInput, pass: false, long: false, shootRelease: false, sub: false }) : null;
           step(state, localTeam === 0 ? [li, ri] : [ri, li], DT);
           evs.push(...state.events);
           first = false;
           acc -= DT;
         }
-        if (!first && role === 'host') remoteInput = { ...remoteInput, pass: false, long: false, shootRelease: false };
+        if (!first && role === 'host') remoteInput = { ...remoteInput, pass: false, long: false, shootRelease: false, sub: false };
         if (hostSync) hostSync.tick(state, evs, dt);
         handleEvents(evs);
         display = state;

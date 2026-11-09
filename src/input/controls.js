@@ -60,7 +60,7 @@ export class TouchTracker {
   }
 }
 
-const KEYMAP = { KeyJ: 'pass', KeyK: 'shoot', KeyL: 'long', ShiftLeft: 'dash', ShiftRight: 'dash', Space: 'shoot' };
+const KEYMAP = { KeyJ: 'pass', KeyK: 'shoot', KeyL: 'long', ShiftLeft: 'dash', ShiftRight: 'dash', Space: 'shoot', KeyC: 'sub' };
 
 /**
  * DOM wiring. `root` contains #stick-zone, #stick-base, #stick-knob and .btn[data-btn].
@@ -161,6 +161,7 @@ export function createControls(root, opts = { mirror: false }) {
         dash: snap.held.has('dash') || heldKey('dash'),
         pass: snap.pressed.has('pass') || keyPressed.has('pass') || pending.pass,
         long: snap.pressed.has('long') || keyPressed.has('long') || pending.long,
+        sub: snap.pressed.has('sub') || keyPressed.has('sub'),
         shootHeld: snap.held.has('shoot') || heldKey('shoot'),
         shootRelease: snap.released.has('shoot') || keyReleased.has('shoot') || pending.shootRelease,
       };

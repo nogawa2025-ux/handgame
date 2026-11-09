@@ -12,7 +12,7 @@ test('dash is faster than run and drains stamina', () => {
   for (let i = 0; i < 60; i++) { movePlayer(a, 1, 0, false, false, DT); movePlayer(b, 1, 0, true, false, DT); }
   assert.ok(b.x > a.x + 1);
   assert.ok(b.stamina < 1);
-  assert.equal(a.stamina, 1);
+  assert.ok(a.stamina > b.stamina);
 });
 
 test('dribbling after HOLD_LIMIT slows by 0.85', () => {
