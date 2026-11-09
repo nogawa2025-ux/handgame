@@ -84,6 +84,9 @@ html, body {
   min-width: 240px; padding: 12px 18px; font-size: 18px; font-weight: 800; border-radius: 12px; border: 0;
   background: #24364d; color: var(--text); font-family: inherit;
 }
+.panel button.mode { min-width: 0; margin-top: 12px; padding: 6px 14px; font-size: 14px; background: transparent; border: 1px solid #3b5878; }
+.panel button.mode b { color: var(--accent); }
+.panel button.mode small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
 .menu button.primary, .panel button.primary { background: var(--accent); color: #1a1a1a; }
 .code { font-size: 46px; font-weight: 900; letter-spacing: .25em; color: var(--accent); margin: 6px 0; font-variant-numeric: tabular-nums; }
 .code-input {
@@ -155,3 +158,12 @@ body.tut #scoreboard, body.tut #passive { display: none; }
 .t-btns button { font-family: inherit; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 8px; border: 0; background: #24364d; color: var(--text); }
 .btn.hint, #stick-base.hint { animation: hint 0.9s ease-in-out infinite; }
 @keyframes hint { 50% { box-shadow: 0 0 0 6px rgba(255, 212, 0, .85), 0 0 24px rgba(255, 212, 0, .9); } }
+
+/* short landscape phones: keep the whole title menu on screen */
+@media (max-height: 420px) {
+  .title { font-size: 30px; }
+  .sub { margin-bottom: 10px; }
+  .menu { gap: 6px; }
+  .menu button { padding: 8px 18px; font-size: 16px; }
+  .panel button.mode { margin-top: 8px; padding: 4px 12px; }
+}

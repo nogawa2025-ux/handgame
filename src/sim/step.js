@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea } from './geometry.js';
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
-import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock } from './actions.js';
+import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock, bestPassTarget, stealChance } from './actions.js';
 import { aiTick } from './ai.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
@@ -122,6 +122,7 @@ function humanTick(s, t, inp, dt) {
   const b = s.ball;
   const attacking = possessionTeam(s) === t;
   if (!attacking && inp.pass) s.controlled[t] = nearestToBall(s, t);
+  if (inp.easy && !attacking) autoSwitch(s, t);
   const me = s.players[s.controlled[t]];
   const holding = b.holder === me.id;
   // a shot feint keeps the shoot button 'spent' until it is released
@@ -157,7 +158,11 @@ function humanTick(s, t, inp, dt) {
       s.shootCharge[t] = 0;
       s.feintHold[t] = true;
     } else if (inp.pass) {
-      const target = pickPassTarget(s, me.id, inp.mx, inp.mz);
+      // easy: the stick picks the receiver only when pushed firmly; otherwise the best option
+      const firm = Math.hypot(inp.mx, inp.mz) > 0.5;
+      const target = inp.easy
+        ? (firm ? pickPassTarget(s, me.id, inp.mx, inp.mz) : null) ?? bestPassTarget(s, me.id)
+        : pickPassTarget(s, me.id, inp.mx, inp.mz);
       if (target !== null) throwBall(s, me.id, target, C.PASS_SPEED);
     } else if (inp.long) {
       const target = pickLongTarget(s, me.id);
@@ -166,15 +171,41 @@ function humanTick(s, t, inp, dt) {
       s.shootCharge[t] = Math.min(1, s.shootCharge[t] + dt / C.SHOT_CHARGE_TIME);
     }
     if (inp.shootRelease && b.holder === me.id) {
-      shoot(s, me.id, inp.mz, s.shootCharge[t]);
+      if (inp.easy) {
+        // easy: a tap is already a decent shot, aimed at the corner away from the keeper
+        const gk = s.players[gkId(1 - t)];
+        const aim = Math.abs(gk.z - me.z * 0.1) < 0.05 ? (me.z >= 0 ? -1 : 1) : gk.z > me.z * 0.1 ? -1 : 1;
+        shoot(s, me.id, aim * 0.95, Math.max(C.EASY_MIN_CHARGE, s.shootCharge[t]));
+      } else shoot(s, me.id, inp.mz, s.shootCharge[t]);
       s.shootCharge[t] = 0;
     }
   } else {
     s.shootCharge[t] = 0;
     const pressed = (inp.shootHeld || inp.shootRelease) && !s.prevShootHeld[t];
     if (!attacking && pressed) trySteal(s, me.id, s.stealBonus[t]);
+    else if (!attacking && inp.easy) autoCut(s, t, me, inp);
   }
   s.prevShootHeld[t] = !!inp.shootHeld;
+}
+
+/** Easy defence: keep control on the defender nearest the ball (with a little hysteresis). */
+function autoSwitch(s, t) {
+  const cur = s.players[s.controlled[t]];
+  const id = nearestToBall(s, t);
+  if (id === cur.id) return;
+  const n = s.players[id], b = s.ball;
+  if (Math.hypot(cur.x - b.x, cur.z - b.z) - Math.hypot(n.x - b.x, n.z - b.z) > C.EASY_SWITCH_MARGIN) s.controlled[t] = id;
+}
+
+/** Easy defence: running at the ball carrier from the front makes a cut attempt by itself. */
+function autoCut(s, t, me, inp) {
+  const b = s.ball;
+  if (b.holder === null || me.stealCd > 0 || me.stun > 0) return;
+  const h = s.players[b.holder];
+  if (h.team === t) return;
+  const dx = h.x - me.x, dz = h.z - me.z, l = Math.hypot(dx, dz), m = Math.hypot(inp.mx, inp.mz);
+  if (m < 0.3 || (inp.mx * dx + inp.mz * dz) / (m * l || 1) < 0.5) return;
+  if (stealChance(s, me, h, s.stealBonus[t]) > 0) trySteal(s, me.id, s.stealBonus[t]);
 }
 
 /** Keep each controlled player sensible: ball holder on attack, receiver of a pass. */

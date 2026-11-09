@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { attackDir, teamIds, gkId, giveBall } from './state.js';
 import { inGoalArea } from './geometry.js';
-import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint, shotFeint, roll } from './actions.js';
+import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint, shotFeint, roll, bestPassTarget } from './actions.js';
 
 // Attack spots in attack space (+x toward the goal being attacked, goal at x=20).
 const ATTACK_SPOTS = [[13.5, -8.3], [13.5, 8.3], [10.5, -4.8], [10.5, 4.8], [9.5, 0], [13.2, 0]];
@@ -28,11 +28,6 @@ function zoneSpot(s, team, i) {
   return [x, z];
 }
 
-function openness(s, p) {
-  let m = Infinity;
-  for (const q of s.players) if (q.team !== p.team) m = Math.min(m, Math.hypot(q.x - p.x, q.z - p.z));
-  return m;
-}
 
 /** CPU ball carrier decisions. */
 function carrier(s, p, dt) {
@@ -77,13 +72,7 @@ function carrier(s, p, dt) {
     }
   }
   if ((threat < 1.7 && b.holdTime > 0.5) || b.holdTime > 2.6) {
-    let best = null, bestScore = -Infinity;
-    for (const id of teamIds(p.team)) {
-      const t = s.players[id];
-      if (id === p.id || t.role === 'gk') continue;
-      const score = openness(s, t) + 0.25 * (t.x * d) - 0.05 * Math.hypot(t.x - p.x, t.z - p.z);
-      if (score > bestScore) { bestScore = score; best = id; }
-    }
+    const best = bestPassTarget(s, p.id);
     if (best !== null) { throwBall(s, p.id, best, C.PASS_SPEED); return; }
   }
   // drive toward a shooting spot, drifting away from the nearest defender

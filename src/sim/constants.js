@@ -63,4 +63,7 @@ export const C = Object.freeze({
   PASSIVE_WARN: 15,
   PASSIVE_LIMIT: 22,
   CPU_SUB_COOLDOWN: 15,
+  // かんたん操作 (assist)
+  EASY_MIN_CHARGE: 0.75,   // a quick tap still shoots hard
+  EASY_SWITCH_MARGIN: 1.5, // switch defender when another is this much closer to the ball
 });

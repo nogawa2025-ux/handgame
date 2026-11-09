@@ -57,6 +57,7 @@ export const LESSONS = [
   {
     title: 'パス',
     text: 'スティックを味方の方へ倒して、パス',
+    easyText: 'パスを押すだけで、いちばん良い味方へパス（スティックを倒せばその方向の味方へ）',
     pc: 'J',
     setup(s) { base(s); calm(s); },
     tick: calm,
@@ -65,6 +66,7 @@ export const LESSONS = [
   {
     title: 'シュート',
     text: 'シュートを長押しして力をためて、離して打つ。スティックの上下で左右の隅を狙おう。ゴールを決めたらクリア',
+    easyText: 'シュートを押すだけで、キーパーのいない隅を自動で狙う（長押しでさらに強く）。ゴールを決めたらクリア',
     pc: 'K / スペース 長押し',
     attack: true,
     setup(s) { shootingSpot(s); calm(s); },
@@ -93,6 +95,7 @@ export const LESSONS = [
   {
     title: '守備',
     text: '守備ではパスでボールに近い選手に切替、シュートでカット。正面から狙おう。ボールを奪えばクリア',
+    easyText: '守備は自動でボールに近い選手に切り替わる。ボールを持つ相手に正面から走って近づけば自動でカット。ボールを奪えばクリア',
     pc: 'J で切替 / K でカット',
     defend: true,
     setup(s) { base(s, 1); },

@@ -50,6 +50,26 @@ export function pickPassTarget(s, fromId, dirX, dirZ) {
   return best;
 }
 
+function openness(s, p) {
+  let m = Infinity;
+  for (const q of s.players) if (q.team !== p.team) m = Math.min(m, Math.hypot(q.x - p.x, q.z - p.z));
+  return m;
+}
+
+/** The most useful teammate to pass to: open, further forward, not too far. */
+export function bestPassTarget(s, fromId) {
+  const p = s.players[fromId];
+  const d = p.team === 0 ? 1 : -1;
+  let best = null, bestScore = -Infinity;
+  for (const id of teamIds(p.team)) {
+    const t = s.players[id];
+    if (id === p.id || t.role === 'gk') continue;
+    const score = openness(s, t) + 0.25 * (t.x * d) - 0.05 * Math.hypot(t.x - p.x, t.z - p.z);
+    if (score > bestScore) { bestScore = score; best = id; }
+  }
+  return best;
+}
+
 export function pickLongTarget(s, fromId) {
   const from = s.players[fromId];
   const d = from.team === 0 ? 1 : -1;

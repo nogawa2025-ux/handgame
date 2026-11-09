@@ -33,7 +33,7 @@ export function tutorialDone({ onCpu, onTitle }) {
   on('#b-title', onTitle);
 }
 
-export function title({ onCreate, onJoin, onCpu, onTutorial }) {
+export function title({ onCreate, onJoin, onCpu, onTutorial, easy, onToggleEasy }) {
   render(`
     <div class="panel">
       <h1 class="title">ハンドボール<span>対戦</span></h1>
@@ -44,11 +44,13 @@ export function title({ onCreate, onJoin, onCpu, onTutorial }) {
         <button id="b-cpu">CPUと練習</button>
         <button id="b-tut">チュートリアル</button>
       </div>
+      <button class="mode" id="b-mode">操作：<b>${easy ? 'かんたん' : '上級'}</b><small>${easy ? '自動で狙う・パス先を選ぶ・守備も自動' : '狙い・パス先・カットを全部自分で'}</small></button>
     </div>`);
   on('#b-create', onCreate);
   on('#b-join', onJoin);
   on('#b-cpu', onCpu);
   on('#b-tut', onTutorial);
+  on('#b-mode', onToggleEasy);
 }
 
 export function lobbyWaiting() {

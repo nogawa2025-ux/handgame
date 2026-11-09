@@ -24,6 +24,14 @@ let views = null;
 const view = createMatchState(); // state shown when idle (title backdrop)
 let match = null; // active match runner
 
+// per-device preference: かんたん操作 (assist) on by default
+const settings = { easy: true };
+try { settings.easy = localStorage.getItem('hb-easy') !== '0'; } catch { /* storage blocked */ }
+function setEasy(v) {
+  settings.easy = v;
+  try { localStorage.setItem('hb-easy', v ? '1' : '0'); } catch { /* storage blocked */ }
+}
+
 function onResize() { resize(cam.camera); }
 addEventListener('resize', onResize);
 onResize();
@@ -35,6 +43,7 @@ export function mergeInput(a, b) {
   return {
     mx: b.mx, mz: b.mz, dash: b.dash, shootHeld: b.shootHeld,
     pass: a.pass || b.pass, long: a.long || b.long, shootRelease: a.shootRelease || b.shootRelease, sub: a.sub || b.sub,
+    easy: b.easy,
   };
 }
 
@@ -99,7 +108,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
   return {
     frame(dt) {
       if (ended) return display;
-      const local = controls.read();
+      const local = { ...controls.read(), easy: settings.easy };
       localQ.add(local);
       if (role === 'guest') {
         guestSync.sendInput(local);
@@ -178,7 +187,7 @@ const app = {
         clearTimeout(msgTimer); msg.textContent = '';
         $('t-step').textContent = `${i + 1}/${HINTS.length}`;
         $('t-title').textContent = L.title;
-        $('t-text').textContent = L.text;
+        $('t-text').textContent = (settings.easy && L.easyText) || L.text;
         $('t-pc').textContent = pc ? `パソコン: ${L.pc}` : '';
         setHints(HINTS[i] ?? []);
       },
@@ -255,6 +264,8 @@ const app = {
       onJoin: () => screens.join((code) => (isValidCode(code) ? app.join(code) : screens.error('部屋が見つかりません。コードを確かめてください', () => app.title())), () => app.title()),
       onCpu: () => app.startCpu(),
       onTutorial: () => app.tutorial(),
+      easy: settings.easy,
+      onToggleEasy: () => { setEasy(!settings.easy); app.title(); },
     });
   },
 };

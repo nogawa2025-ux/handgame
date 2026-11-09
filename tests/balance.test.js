@@ -83,3 +83,37 @@ test('CPU substitutions are rationed', () => {
   }
   assert.ok(subs <= 2 * Math.ceil(60 / C.CPU_SUB_COOLDOWN) + 2, `subs ${subs}`);
 });
+
+test('easy: a quick tap shoots hard at the corner away from the keeper', () => {
+  const s = createMatchState(); scatter(s); s.phase = 'play';
+  Object.assign(s.players[1], { x: 10, z: 0, facing: 0 }); giveBall(s, 1); s.controlled[0] = 1;
+  s.players[7].z = 0.6; // keeper cheating to the +z side
+  step(s, [{ ...idle(), easy: true, shootHeld: true }, idle()], DT);
+  step(s, [{ ...idle(), easy: true, shootRelease: true }, idle()], DT);
+  assert.ok(s.ball.shot);
+  assert.ok(s.ball.vz < 0, 'aimed at the -z corner');
+  assert.ok(Math.hypot(s.ball.vx, s.ball.vz) > C.SHOT_MIN + (C.SHOT_MAX - C.SHOT_MIN) * 0.6, 'hard shot');
+});
+
+test('easy: pass with the stick neutral still finds a teammate', () => {
+  const s = createMatchState(); s.phase = 'play'; // throw-off: everyone behind the holder
+  step(s, [{ ...idle(), pass: true }, idle()], DT);
+  assert.notEqual(s.ball.holder, null, 'expert pass forward with nobody there does nothing');
+  step(s, [{ ...idle(), easy: true, pass: true }, idle()], DT);
+  assert.equal(s.ball.holder, null);
+  assert.ok(s.ball.passTarget !== null && s.players[s.ball.passTarget].team === 0);
+});
+
+test('easy: defence switches to the nearest player and cuts when running at the carrier', () => {
+  const s = createMatchState(); scatter(s); s.phase = 'play';
+  Object.assign(s.players[8], { x: 0, z: 0, facing: Math.PI }); giveBall(s, 8);
+  Object.assign(s.players[2], { x: -1.0, z: 0, facing: 0, stealCd: 0, stun: 0 });
+  s.controlled[0] = 5; // far away
+  let tries = 0;
+  for (let i = 0; i < 3; i++) {
+    step(s, [{ ...idle(), easy: true, mx: 1 }, null], DT);
+    if (s.players[2].stealCd > 0) tries++;
+  }
+  assert.equal(s.controlled[0] === 2 || s.ball.holder === 2, true, 'switched to the nearest defender');
+  assert.ok(tries > 0 || s.ball.holder === 2, 'a cut was attempted');
+});
