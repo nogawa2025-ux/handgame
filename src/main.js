@@ -9,6 +9,7 @@ import { PendingInput } from './input/pending.js';
 import { isValidCode } from './net/peer.js';
 import * as screens from './ui/screens.js';
 import * as net from './net/session.js';
+import { createTutorial } from './ui/tutorial.js';
 
 const DT = 1 / 60;
 const $ = (id) => document.getElementById(id);
@@ -41,7 +42,7 @@ export function mergeInput(a, b) {
  * Runs one match. role: 'cpu' | 'host' | 'guest'.
  * Host and CPU simulate locally; guest renders snapshots from the host.
  */
-function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
+function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) {
   const state = createMatchState();
   const mirror = localTeam === 1;
   controls.setMirror(mirror);
@@ -112,7 +113,9 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
         while (acc >= DT) {
           const li = first ? (taken = localQ.take()) : { ...taken, pass: false, long: false, shootRelease: false, sub: false };
           const ri = role === 'host' ? (first ? remoteInput : { ...remoteInput, pass: false, long: false, shootRelease: false, sub: false }) : null;
+          tutorial?.before(state);
           step(state, localTeam === 0 ? [li, ri] : [ri, li], DT);
+          tutorial?.after(state, state.events, li, DT);
           evs.push(...state.events);
           first = false;
           acc -= DT;
@@ -132,6 +135,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
     mirror,
     localTeam,
     get state() { return display; },
+    sim: state,
     stop() { ended = true; hostSync?.stop(); guestSync?.stop(); $('controls').classList.add('hidden'); hud.show(false); },
   };
 }
@@ -151,6 +155,46 @@ const app = {
       },
     });
     screens.countdown(3);
+  },
+  tutorial() {
+    screens.clear();
+    document.body.classList.add('tut');
+    const box = $('tutorial'), msg = $('t-msg');
+    const pc = matchMedia('(pointer: fine)').matches;
+    const HINTS = [['stick-base'], ['btn-dash'], ['btn-pass'], ['btn-shoot'], ['btn-shoot', 'btn-pass'], ['stick-base'], ['btn-pass', 'btn-shoot'], ['btn-sub']];
+    const setHints = (ids) => {
+      document.querySelectorAll('.hint').forEach((e) => e.classList.remove('hint'));
+      for (const id of ids) $(id)?.classList.add('hint');
+    };
+    let msgTimer = 0;
+    const say = (text, cls) => { msg.textContent = text; msg.className = cls; clearTimeout(msgTimer); msgTimer = setTimeout(() => { msg.textContent = ''; }, 1600); };
+    const end = () => {
+      box.classList.add('hidden'); setHints([]); document.body.classList.remove('tut');
+      clearTimeout(msgTimer);
+      match?.stop(); match = null;
+    };
+    const tut = createTutorial({
+      onLesson(i, L) {
+        clearTimeout(msgTimer); msg.textContent = '';
+        $('t-step').textContent = `${i + 1}/${HINTS.length}`;
+        $('t-title').textContent = L.title;
+        $('t-text').textContent = L.text;
+        $('t-pc').textContent = pc ? `パソコン: ${L.pc}` : '';
+        setHints(HINTS[i] ?? []);
+      },
+      onClear() { say('できた！', 'ok'); navigator.vibrate?.(30); },
+      onRetry(hint) { say(hint, 'retry'); },
+      onFinish() {
+        end();
+        screens.tutorialDone({ onCpu: () => app.startCpu(), onTitle: () => app.title() });
+      },
+    });
+    match = runMatch({ role: 'cpu', localTeam: 0, tutorial: tut, onEnd: () => {} });
+    tut.start(match.sim, 0);
+    box.classList.remove('hidden');
+    $('t-skip').onclick = () => tut.skip(match.sim);
+    $('t-quit').onclick = () => { end(); app.title(); };
+    app._endTutorial = end;
   },
   async create() {
     screens.lobbyWaiting();
@@ -203,12 +247,14 @@ const app = {
     screens.countdown(3);
   },
   title() {
+    app._endTutorial?.(); app._endTutorial = null;
     match?.stop(); match = null;
     hud.show(false);
     screens.title({
       onCreate: () => app.create(),
       onJoin: () => screens.join((code) => (isValidCode(code) ? app.join(code) : screens.error('部屋が見つかりません。コードを確かめてください', () => app.title())), () => app.title()),
       onCpu: () => app.startCpu(),
+      onTutorial: () => app.tutorial(),
     });
   },
 };
@@ -221,8 +267,9 @@ function loop(now) {
   last = now;
   let shown = view, mirror = false, localTeam = 0;
   if (match) {
-    shown = match.frame(dt);
-    mirror = match.mirror; localTeam = match.localTeam;
+    const m = match; // frame() may end the match (tutorial finish) and clear `match`
+    shown = m.frame(dt);
+    mirror = m.mirror; localTeam = m.localTeam;
   } else {
     // gentle attract mode behind the title screen
     idleT += dt;

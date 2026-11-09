@@ -19,7 +19,21 @@ export function clear() {
   el().classList.add('hidden');
 }
 
-export function title({ onCreate, onJoin, onCpu }) {
+export function tutorialDone({ onCpu, onTitle }) {
+  render(`
+    <div class="panel">
+      <p class="result win">準備OK！</p>
+      <p class="final">これで全部の操作を覚えました</p>
+      <div class="row">
+        <button class="primary" id="b-cpu">CPUと練習</button>
+        <button id="b-title">タイトルへ</button>
+      </div>
+    </div>`);
+  on('#b-cpu', onCpu);
+  on('#b-title', onTitle);
+}
+
+export function title({ onCreate, onJoin, onCpu, onTutorial }) {
   render(`
     <div class="panel">
       <h1 class="title">ハンドボール<span>対戦</span></h1>
@@ -28,11 +42,13 @@ export function title({ onCreate, onJoin, onCpu }) {
         <button class="primary" id="b-create">部屋を作る</button>
         <button id="b-join">部屋に入る</button>
         <button id="b-cpu">CPUと練習</button>
+        <button id="b-tut">チュートリアル</button>
       </div>
     </div>`);
   on('#b-create', onCreate);
   on('#b-join', onJoin);
   on('#b-cpu', onCpu);
+  on('#b-tut', onTutorial);
 }
 
 export function lobbyWaiting() {

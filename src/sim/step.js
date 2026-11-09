@@ -135,7 +135,7 @@ function humanTick(s, t, inp, dt) {
   if (prev) prev.age += dt;
   if (mag > 0.6) {
     const nx = inp.mx / mag, nz = inp.mz / mag;
-    if (holding && me.role === 'field' && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
+    if (holding && me.role === 'field' && !inp.shootHeld && prev && prev.age < C.STEP_WINDOW && nx * prev.x + nz * prev.z < -0.5) {
       stepFeint(s, me.id, nx, nz);
     }
     s.lastStick[t] = { x: nx, z: nz, age: 0 };

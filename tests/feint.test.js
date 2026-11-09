@@ -124,6 +124,13 @@ test('a keeper wrong-footed by a shot feint cannot cover the other corner', () =
   assert.equal(faked.score, 1, 'after the feint the same shot goes in');
 });
 
+test('aiming during a wind-up never triggers a step feint', () => {
+  const s = attackSetup();
+  const evs = [];
+  for (let i = 0; i < 20; i++) { step(s, [{ ...idle(), shootHeld: true, mz: i % 4 < 2 ? 1 : -1 }, idle()], DT); evs.push(...s.events); }
+  assert.ok(!evs.includes('feint'));
+});
+
 test('CPU carriers use step feints against a close marker', () => {
   const s = createMatchState(); s.phase = 'play';
   let feints = 0;
