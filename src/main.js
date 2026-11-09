@@ -76,7 +76,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
     $('controls').classList.add('hidden');
     controls.releaseAll();
     if (winner === localTeam) confetti();
-    onEnd(winner, state.score.slice(), display.score.slice());
+    onEnd(winner, display.score.slice());
   };
 
   return {
