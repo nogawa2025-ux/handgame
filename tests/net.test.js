@@ -23,6 +23,10 @@ test('encode/decode snapshot round-trips positions within 0.01', () => {
   assert.deepEqual(d.bench.map((b) => b.map((x) => x.num)), s.bench.map((b) => b.map((x) => x.num)));
   assert.deepEqual(d.players.map((p) => p.num), s.players.map((p) => p.num));
   s.players.forEach((p, i) => assert.ok(Math.abs(p.stamina - d.players[i].stamina) <= 0.01));
+  s.attack = { team: 1, time: 16, warned: true };
+  const w = decodeSnapshot(JSON.parse(JSON.stringify(encodeSnapshot(s))));
+  assert.equal(w.attack.warned, true);
+  assert.equal(w.attack.team, 1);
 });
 
 const at = (x) => { const s = createMatchState(); s.players[3].x = x; s.ball.x = x; return s; };

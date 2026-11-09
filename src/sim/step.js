@@ -1,7 +1,7 @@
 import { C } from './constants.js';
-import { checkGoal, checkOut, inGoalArea } from './geometry.js';
+import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea } from './geometry.js';
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
-import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute } from './actions.js';
+import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock } from './actions.js';
 import { aiTick } from './ai.js';
 
 /** Team currently "in possession" (holder's team, or last touch while loose). */
@@ -16,6 +16,8 @@ export function step(s, inputs, dt) {
   s.stealBonus ??= [0, 0];
   s.feintHold ??= [false, false];
   s.lastStick ??= [null, null];
+  s.subCd ??= [0, 0];
+  s.attack ??= { team: null, time: 0, warned: false };
   if (s.phase === 'ended') return;
   for (const bench of s.bench ?? []) for (const b of bench) b.stamina = Math.min(1, b.stamina + C.STAMINA_BENCH * dt);
 
@@ -37,8 +39,11 @@ export function step(s, inputs, dt) {
 
   // ---- play ----
   for (const t of [0, 1]) {
+    s.subCd[t] = Math.max(0, s.subCd[t] - dt);
     if (inputs[t] != null) { if (inputs[t].sub) substitute(s, t); }
-    else if (s.players.some((p) => p.team === t && p.role === 'field' && p.id !== s.ball.holder && p.stamina < C.CPU_SUB_BELOW)) substitute(s, t, 0.35);
+    else if (s.subCd[t] <= 0 && s.players.some((p) => p.team === t && p.role === 'field' && p.id !== s.ball.holder && p.stamina < C.CPU_SUB_BELOW)) {
+      if (substitute(s, t, 0.35)) s.subCd[t] = C.CPU_SUB_COOLDOWN;
+    }
   }
   const prevTeam = possessionTeam(s);
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
@@ -73,9 +78,36 @@ export function step(s, inputs, dt) {
     if (inputs[def] != null) s.controlled[def] = nearestToBall(s, def);
   }
   syncControlled(s, inputs);
+  if (passivePlay(s, dt)) return;
 
   s.time -= dt;
   if (s.time <= 0) endOfTime(s);
+}
+
+/**
+ * Passive play: an attack that goes on too long without a shot gets a warning,
+ * then the ball goes to the other side. Returns true if play was stopped.
+ */
+export function passivePlay(s, dt) {
+  const a = s.attack;
+  const team = possessionTeam(s);
+  if (team !== a.team || s.events.includes('shot')) { a.team = team; a.time = 0; a.warned = false; return false; }
+  a.time += dt;
+  if (!a.warned && a.time >= C.PASSIVE_WARN) { a.warned = true; s.events.push('passive-warn:' + team); }
+  if (a.time < C.PASSIVE_LIMIT) return false;
+  // free throw for the defenders where the ball is
+  const b = s.ball;
+  const other = 1 - team;
+  s.events.push('passive:' + team);
+  const id = nearestToBall(s, other);
+  const p = s.players[id];
+  p.x = Math.max(-19.5, Math.min(19.5, b.x)); p.z = Math.max(-9.7, Math.min(9.7, b.z));
+  clampOutOfGoalArea(p);
+  p.vx = p.vz = 0;
+  giveBall(s, id);
+  a.team = other; a.time = 0; a.warned = false;
+  setRestart(s);
+  return true;
 }
 
 /** A pass that missed (too old or rolled to a crawl) becomes a plain loose ball. */
@@ -172,6 +204,7 @@ function ballPhysics(s, dt, rules) {
   if (b.shot) b.shotAge = (b.shotAge ?? 0) + dt;
   b.vy -= C.GRAVITY * dt;
   b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+  if (rules) tryBlock(s);
   if (b.y < 0.11) {
     b.y = 0.11;
     b.vy = Math.abs(b.vy) > 1.5 ? -b.vy * 0.55 : 0;

@@ -43,7 +43,7 @@ test('stunned defender cannot steal', () => {
   s.players[8].stun = 0.3;
   assert.equal(trySteal(s, 8), false);
   s.players[8].stun = 0;
-  assert.equal(trySteal(s, 8), true);
+  assert.equal(trySteal(s, 8, 0, 0), true);
 });
 
 test('step feint: quick stick reversal bursts the other way and stuns the marker', () => {

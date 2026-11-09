@@ -94,7 +94,10 @@ export function shoot(s, fromId, aimZ, charge) {
   from.facing = Math.atan2(tz - from.z, gx - from.x);
   launch(s, from, gx, tz, 0.9 + 0.6 * Math.abs(aimZ), speed);
   const b = s.ball;
-  b.passTarget = null; b.shot = true; b.shotTeam = from.team; b.shotAge = 0;
+  b.passTarget = null; b.shot = true; b.shotTeam = from.team; b.shotAge = 0; b.blockChecked = [];
+  // a keeper already leaning the wrong way stays committed for this shot
+  const gk = s.players[from.team === 0 ? 7 : 0];
+  b.gkLean = gk.offBalance > 0 ? Math.sign(gk.lean) : 0;
   from.anim = 'shoot'; from.animTimer = 0.4;
   s.events.push('shot');
 }
@@ -107,7 +110,7 @@ export function tryCatch(s) {
     if (p.id === b.thrower && b.throwTimer > 0) continue;
     if (p.role === 'gk') continue; // keepers catch via save logic / area pickup
     if (p.stun > 0) continue;       // wrong-footed players can't react to the ball
-    if (b.shot && p.team === b.shotTeam) continue; // teammates never stop their own shot
+    if (b.shot) continue; // a shot can't be caught cleanly: defenders block it (tryBlock), keepers save it
     const d = Math.hypot(p.x - b.x, p.z - b.z);
     const r = p.id === b.passTarget ? C.CATCH_R * 1.4 : C.CATCH_R;
     if (d < r && d < bestD) { bestD = d; best = p.id; }
@@ -119,18 +122,55 @@ export function tryCatch(s) {
   }
 }
 
-export function trySteal(s, stealerId, bonus = 0) {
+/** Deterministic pseudo-random number in [0,1) from the match clock and a salt. */
+export function roll(s, salt) {
+  return Math.abs(Math.sin(s.time * 12.9898 + salt * 78.233) * 43758.5453) % 1;
+}
+
+/** Chance that a cut attempt by `st` on holder `h` wins the ball (0 if out of reach). */
+export function stealChance(s, st, h, bonus = 0) {
+  const b = s.ball;
+  const dx = h.x - st.x, dz = h.z - st.z;
+  const dribbling = b.holdTime > C.HOLD_LIMIT;
+  const range = (dribbling ? C.STEAL_RANGE_DRIBBLE : C.STEAL_RANGE) + bonus;
+  if (Math.hypot(dx, dz) > range) return 0;
+  if (angleBetween(Math.cos(st.facing), Math.sin(st.facing), dx, dz) > (70 * Math.PI) / 180) return 0;
+  if (dribbling) return C.STEAL_CHANCE_DRIBBLE;
+  // where is the defender relative to where the holder faces?
+  const behind = angleBetween(Math.cos(h.facing), Math.sin(h.facing), -dx, -dz) > (120 * Math.PI) / 180;
+  return behind ? C.STEAL_CHANCE_BEHIND : C.STEAL_CHANCE;
+}
+
+/** A cut attempt. A miss costs a cooldown and leaves the defender briefly wrong-footed. */
+export function trySteal(s, stealerId, bonus = 0, r = roll(s, stealerId + 31)) {
   const b = s.ball, st = s.players[stealerId];
   if (b.holder === null || st.stealCd > 0 || st.stun > 0) return false;
   const h = s.players[b.holder];
   if (h.team === st.team || h.role !== 'field') return false;
-  const dx = h.x - st.x, dz = h.z - st.z;
-  const range = (b.holdTime > C.HOLD_LIMIT ? C.STEAL_RANGE_DRIBBLE : C.STEAL_RANGE) + bonus;
-  const ok = Math.hypot(dx, dz) <= range &&
-    angleBetween(Math.cos(st.facing), Math.sin(st.facing), dx, dz) <= (70 * Math.PI) / 180;
-  if (ok) { giveBall(s, stealerId); s.events.push('steal'); }
-  else st.stealCd = C.STEAL_COOLDOWN;
-  return ok;
+  const chance = stealChance(s, st, h, bonus);
+  st.stealCd = C.STEAL_COOLDOWN;
+  if (chance > 0 && r < chance) { giveBall(s, stealerId); s.events.push('steal'); return true; }
+  if (chance > 0) { st.stun = C.STEAL_MISS_STUN; st.vx *= 0.3; st.vz *= 0.3; }
+  return false;
+}
+
+/** A shot in its early flight can be blocked by a defender standing in its path. */
+export function tryBlock(s) {
+  const b = s.ball;
+  if (!b.shot || b.shotAge > C.BLOCK_WINDOW || b.y > C.BLOCK_H || !b.blockChecked) return false;
+  for (const q of s.players) {
+    if (q.team === b.shotTeam || q.role !== 'field' || q.stun > 0 || b.blockChecked.includes(q.id)) continue;
+    if (Math.hypot(q.x - b.x, q.z - b.z) > C.BLOCK_R) continue;
+    b.blockChecked.push(q.id); // one chance per defender per shot
+    if (roll(s, q.id + 57) >= C.BLOCK_CHANCE) continue;
+    const sp = Math.hypot(b.vx, b.vz);
+    b.vx = -b.vx * 0.12; b.vz = (roll(s, q.id + 91) < 0.5 ? -1 : 1) * (0.2 + 0.2 * roll(s, q.id + 13)) * sp; b.vy = 1.5;
+    b.shot = false; b.shotTeam = null; b.passTarget = null; b.lastTeam = q.team; b.thrower = q.id; b.throwTimer = 0.2;
+    q.anim = 'shoot'; q.animTimer = 0.3;
+    s.events.push('block');
+    return true;
+  }
+  return false;
 }
 
 export function nearestToBall(s, team) {

@@ -126,3 +126,10 @@ html, body {
 #stamina .bar { width: 8px; height: 28px; background: rgba(255,255,255,.15); border-radius: 3px; position: relative; overflow: hidden; }
 #stamina .bar i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 3px; }
 #banner.small { font-size: 26px; top: 22%; }
+/* passive-play warning (referee's raised arm) under the scoreboard */
+#passive {
+  position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 40px); left: 50%; transform: translateX(-50%);
+  background: rgba(255, 212, 0, .92); color: #1a1a1a; font-weight: 900; font-size: 14px; padding: 3px 12px; border-radius: 12px;
+  animation: blink 1s steps(2) infinite;
+}
+@keyframes blink { 50% { opacity: .55; } }

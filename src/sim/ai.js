@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { attackDir, teamIds, gkId, giveBall } from './state.js';
 import { inGoalArea } from './geometry.js';
-import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint, shotFeint } from './actions.js';
+import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint, shotFeint, roll } from './actions.js';
 
 // Attack spots in attack space (+x toward the goal being attacked, goal at x=20).
 const ATTACK_SPOTS = [[13.5, -8.3], [13.5, 8.3], [10.5, -4.8], [10.5, 4.8], [9.5, 0], [13.2, 0]];
@@ -55,7 +55,8 @@ function carrier(s, p, dt) {
     if (u <= 0 || u >= 1) return true;
     return Math.hypot(p.x + ax * u - q.x, p.z + az * u - q.z) > 0.9;
   });
-  if (distGoal < 9.6 && b.holdTime > 0.35 && (laneOpen || b.holdTime > 2.2)) {
+  const hurry = s.attack?.warned && s.attack.team === p.team;
+  if ((distGoal < 9.6 && b.holdTime > 0.35 && (laneOpen || b.holdTime > 2.2)) || (hurry && distGoal < 12 && b.holdTime > 0.2)) {
     const gk = s.players[gkId(1 - p.team)];
     const aim = gk.z > 0 ? -1 : gk.z < 0 ? 1 : (p.z >= 0 ? -1 : 1);
     // vary placement and power like a real shooter (deterministic, from the clock)
@@ -110,11 +111,14 @@ function keeper(s, team, dt, cpu) {
     // save check when the ball reaches the keeper's plane
     if ((b.x - gk.x) * Math.sign(own) >= 0 && Math.abs(b.x - gk.x) < 0.6 && b.y < 2.4) {
       // a keeper wrong-footed by a shot feint can barely reach the other side
-      const wrongSide = gk.offBalance > 0 && Math.sign(b.z - gk.z) !== Math.sign(gk.lean);
+      const lean = b.gkLean || (gk.offBalance > 0 ? Math.sign(gk.lean) : 0);
+      const wrongSide = lean !== 0 && Math.sign(b.z - gk.z) !== lean;
       // on a long flight the keeper also shuffles across before diving, so distance shots get covered
       const shuffle = Math.max(0, b.shotAge - 0.7) * C.GK_SPEED;
       const cap = (wrongSide ? 0.45 : C.GK_REACH) + shuffle;
-      const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE + shuffle);
+      // a bit of luck either way: some corners get a fingertip, some soft ones squeeze in
+      const luck = (roll(s, 7 + team) - 0.4) * C.GK_LUCK;
+      const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE + shuffle + luck);
       if (Math.abs(b.z - gk.z) <= reach) {
         giveBall(s, gk.id);
         s.gkTimer[team] = 0;
@@ -158,7 +162,7 @@ export function aiTick(s, team, dt, cpuControlsAll) {
   let presser = null;
   if (!attacking && b.holder !== null) {
     const ownX = -d * C.COURT_HALF_X;
-    const near = Math.abs(b.x - ownX) < (cpuControlsAll ? 11 : 9.5);
+    const near = Math.abs(b.x - ownX) < 11;
     if (near) {
       let best = Infinity;
       for (const id of ids) {
@@ -193,9 +197,13 @@ export function aiTick(s, team, dt, cpuControlsAll) {
       const ownX = -d * C.COURT_HALF_X;
       const ux = ownX - h.x, uz = -h.z;
       const ul = Math.hypot(ux, uz) || 1;
-      moveTo(p, h.x + (ux / ul) * 0.9, h.z + (uz / ul) * 0.9, dt, false, 0.95);
+      // step out and close the shooter down; sprint if far off
+      const far = Math.hypot(h.x - p.x, h.z - p.z) > 2;
+      if (far && p.stun <= 0) { const tx = h.x + (ux / ul) * 1.0 - p.x, tz = h.z + (uz / ul) * 1.0 - p.z, l = Math.hypot(tx, tz); movePlayer(p, tx / l, tz / l, p.stamina > 0.2, false, dt, C.RUN); }
+      else moveTo(p, h.x + (ux / ul) * 1.0, h.z + (uz / ul) * 1.0, dt, false, 1);
       p.facing = Math.atan2(h.z - p.z, h.x - p.x);
-      if (b.holdTime > 1.0) trySteal(s, id, -0.2);
+      // arms up in the lane against a wind-up; otherwise poke at the ball now and then
+      if (s.shootCharge[h.team] <= 0 && b.holdTime > 0.6) trySteal(s, id);
       return;
     }
     const [zx, zz] = zoneSpot(s, team, i);

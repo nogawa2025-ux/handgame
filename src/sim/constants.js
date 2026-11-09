@@ -23,9 +23,10 @@ export const C = Object.freeze({
   STEAL_RANGE_DRIBBLE: 1.6,
   STEAL_COOLDOWN: 0.6,
   CATCH_R: 0.7,
-  GK_REACH: 1.2,
+  GK_REACH: 1.3,
   GK_DIVE: 3.2,
   GK_REACT: 0.18,
+  GK_LUCK: 0.6,
   // stamina (per second): moving costs a little, dashing a lot, standing/bench recovers
   STAMINA_BASE: 0.0013,
   STAMINA_RUN: 0.0022,   // × (speed / RUN)^2
@@ -34,7 +35,7 @@ export const C = Object.freeze({
   STAMINA_BENCH: 0.03,
   STAMINA_MIN_DASH: 0.1,
   TIRED_SLOWDOWN: 0.25,  // speed × (1 - 0.25 × (1 - stamina))
-  CPU_SUB_BELOW: 0.4,
+  CPU_SUB_BELOW: 0.3,
   GOAL_PAUSE: 2,
   RESTART_PAUSE: 1,
   COUNTDOWN: 3,
@@ -48,4 +49,18 @@ export const C = Object.freeze({
   STEP_WINDOW: 0.25,     // stick reversal within this time counts as a step feint
   GK_FEINT_RANGE: 13,    // keeper reacts to shot feints from this distance
   GK_OFF_BALANCE: 0.7,
+  // cuts: a chance, not a sure thing; a missed lunge leaves the defender off balance
+  STEAL_CHANCE: 0.4,
+  STEAL_CHANCE_DRIBBLE: 0.85, // holding on and bouncing the ball is easy to poke away
+  STEAL_CHANCE_BEHIND: 0.12,  // reaching round from behind rarely works
+  STEAL_MISS_STUN: 0.35,
+  // shot blocks: a defender standing in the shot's path can get a hand to it
+  BLOCK_R: 0.8,
+  BLOCK_H: 2.3,
+  BLOCK_CHANCE: 0.6,
+  BLOCK_WINDOW: 0.45,         // only early in the flight (near the shooter)
+  // passive play: attack too long without a shot → warning, then the ball changes sides
+  PASSIVE_WARN: 15,
+  PASSIVE_LIMIT: 22,
+  CPU_SUB_COOLDOWN: 15,
 });

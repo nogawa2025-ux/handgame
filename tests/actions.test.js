@@ -55,7 +55,7 @@ test('trySteal fails beyond STEAL_RANGE, succeeds within when facing, fails when
   let s = stealSetup(C.STEAL_RANGE + 0.3, Math.PI);
   assert.equal(trySteal(s, 8), false);
   s = stealSetup(C.STEAL_RANGE - 0.2, Math.PI);
-  assert.equal(trySteal(s, 8), true);
+  assert.equal(trySteal(s, 8, 0, 0), true);
   assert.equal(s.ball.holder, 8);
   s = stealSetup(C.STEAL_RANGE - 0.2, 0);
   assert.equal(trySteal(s, 8), false);
@@ -64,7 +64,7 @@ test('trySteal fails beyond STEAL_RANGE, succeeds within when facing, fails when
 test('trySteal range grows when holder is dribbling', () => {
   const s = stealSetup(C.STEAL_RANGE + 0.2, Math.PI);
   s.ball.holdTime = C.HOLD_LIMIT + 0.1;
-  assert.equal(trySteal(s, 8), true);
+  assert.equal(trySteal(s, 8, 0, 0), true);
 });
 
 test('nearestToBall ignores goalkeepers', () => {

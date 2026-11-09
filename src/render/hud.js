@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 
 export function createHud() {
   const hud = $('hud'), score = $('score-text'), clock = $('clock'), banner = $('banner');
-  const charge = $('charge'), fill = $('charge-fill'), stam = $('stamina');
+  const charge = $('charge'), fill = $('charge-fill'), stam = $('stamina'), passive = $('passive');
   let stamKey = '';
   let bannerTimer = 0;
   return {
@@ -27,6 +27,7 @@ export function createHud() {
         bar.style.background = v > 0.6 ? '#43c46a' : v > 0.35 ? '#ffd400' : '#ff5a5a';
         el.classList.toggle('on', p.id === state.controlled[localTeam]);
       });
+      passive.classList.toggle('hidden', !state.attack?.warned);
       const c = state.shootCharge[localTeam];
       charge.classList.toggle('on', c > 0);
       fill.style.width = `${Math.round(c * 100)}%`;

@@ -70,6 +70,14 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
       } else if (e === 'save') hud.flash('セーブ！', false, 0.9);
       else if (e === 'steal' || e === 'intercept') { /* subtle: no banner */ }
       else if (e === 'overtime') hud.flash('延長戦！', true, 2);
+      else if (e === 'block') hud.flash('ブロック！', false, 0.8, true);
+      else if (e.startsWith('passive-warn:')) {
+        const mine = Number(e.slice(13)) === localTeam;
+        hud.flash(mine ? 'パッシブ警告：早くシュート！' : '相手にパッシブ警告', !mine, 1.4, true);
+      } else if (e.startsWith('passive:')) {
+        const mine = Number(e.slice(8)) === localTeam;
+        hud.flash(mine ? 'パッシブ！相手ボール' : 'パッシブ！こちらのボール', !mine, 1.6, true);
+      }
       else if (e.startsWith('sub:')) {
         const [, t, out, inn] = e.split(':');
         const mine = Number(t) === localTeam;
