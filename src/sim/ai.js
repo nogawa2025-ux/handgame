@@ -1,7 +1,7 @@
 import { C } from './constants.js';
 import { attackDir, teamIds, gkId, giveBall } from './state.js';
 import { inGoalArea } from './geometry.js';
-import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint } from './actions.js';
+import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall, stepFeint, shotFeint } from './actions.js';
 
 // Attack spots in attack space (+x toward the goal being attacked, goal at x=20).
 const ATTACK_SPOTS = [[13.5, -8.3], [13.5, 8.3], [10.5, -4.8], [10.5, 4.8], [9.5, 0], [13.2, 0]];
@@ -60,7 +60,9 @@ function carrier(s, p, dt) {
     const aim = gk.z > 0 ? -1 : gk.z < 0 ? 1 : (p.z >= 0 ? -1 : 1);
     // vary placement and power like a real shooter (deterministic, from the clock)
     const r = Math.abs(Math.sin(s.time * 12.9898 + p.id * 78.233) * 43758.5453) % 1;
-    shoot(s, p.id, aim * (0.8 + 0.2 * r), 0.65 + 0.35 * ((r * 7.31) % 1));
+    // sometimes sell a shot to the other corner first (the keeper leans the wrong way)
+    if (!p.shotFeinted && r < 0.15) { shotFeint(s, p.id, -aim, 0.6); p.shotFeinted = true; return; }
+    shoot(s, p.id, aim * (0.9 + 0.1 * r), 0.85 + 0.15 * ((r * 7.31) % 1));
     return;
   }
   // under pressure from a marker who hasn't been fooled yet: try a step feint first

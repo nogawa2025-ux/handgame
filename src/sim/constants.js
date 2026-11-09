@@ -23,8 +23,8 @@ export const C = Object.freeze({
   STEAL_RANGE_DRIBBLE: 1.6,
   STEAL_COOLDOWN: 0.6,
   CATCH_R: 0.7,
-  GK_REACH: 1.1,
-  GK_DIVE: 2.6,
+  GK_REACH: 1.2,
+  GK_DIVE: 3.2,
   GK_REACT: 0.18,
   // stamina (per second): moving costs a little, dashing a lot, standing/bench recovers
   STAMINA_BASE: 0.0013,
