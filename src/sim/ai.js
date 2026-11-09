@@ -1,5 +1,6 @@
 import { C } from './constants.js';
 import { attackDir, teamIds, gkId, giveBall } from './state.js';
+import { inGoalArea } from './geometry.js';
 import { movePlayer, pickLongTarget, throwBall, shoot, trySteal, nearestToBall } from './actions.js';
 
 // Attack spots in attack space (+x toward the goal being attacked, goal at x=20).
@@ -79,6 +80,8 @@ function keeper(s, team, dt, cpu) {
     movePlayer(gk, 0, 0, false, false, dt, C.GK_SPEED);
     return;
   }
+  // a slow loose ball in our own area: step.keeperPickup walks the keeper to it
+  if (b.holder === null && !b.shot && b.y < 2 && Math.hypot(b.vx, b.vz) <= 4 && inGoalArea(b.x, b.z, Math.sign(own))) return;
   const incoming = b.holder === null && b.shot && b.shotTeam !== team;
   if (incoming) {
     // save check when the ball reaches the keeper's plane

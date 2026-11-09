@@ -72,6 +72,8 @@ export function wrapConn(dc, peer, { heartbeat = true } = {}) {
       return () => listeners.get(type)?.delete(fn);
     },
     onClose(fn) { closeFn = fn; },
+    /** Abort the connection and report it as lost (both sides show the message). */
+    drop() { try { dc.send({ t: 'bye' }); } catch {} fireClose(); },
     close() {
       if (closed) return;
       try { dc.send({ t: 'bye' }); } catch {}
@@ -120,6 +122,10 @@ export async function createRoom(PeerCtor) {
       });
     });
     peer.on('error', (e) => { if (!peer._taken) reject(netError(e)); });
+    // sharing the link backgrounds the page and drops the signalling socket: reconnect
+    const revive = () => { if (!peer._taken && !peer.destroyed && peer.disconnected) { try { peer.reconnect(); } catch {} } };
+    peer.on('disconnected', revive);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
   });
   waiting.catch(() => {});
   return { code, waitForGuest: () => waiting, cancel };
@@ -159,3 +165,5 @@ export function errorText(e) {
     default: return 'エラーが発生しました。やり直してください';
   }
 }
+
+export const isValidCode = (code) => typeof code === 'string' && new RegExp(`^[${ALPHABET}]{5}$`).test(code);

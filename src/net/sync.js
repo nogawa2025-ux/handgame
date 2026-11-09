@@ -9,7 +9,7 @@ const PHASES = ['countdown', 'play', 'goal', 'restart', 'ended'];
 const r2 = (v) => Math.round(v * 100) / 100;
 const now = () => performance.now() / 1000;
 
-export function encodeSnapshot(s) {
+export function encodeSnapshot(s, ack = 0) {
   const p = [];
   for (const q of s.players) p.push(r2(q.x), r2(q.z), r2(q.vx), r2(q.vz), r2(q.facing), ANIMS.indexOf(q.anim), r2(q.animTimer));
   const b = s.ball;
@@ -18,6 +18,7 @@ export function encodeSnapshot(s) {
     b: [r2(b.x), r2(b.y), r2(b.z), r2(b.vx), r2(b.vy), r2(b.vz), b.holder ?? -1, r2(b.holdTime), b.lastTeam, b.passTarget ?? -1],
     t: r2(s.time), ph: PHASES.indexOf(s.phase), pt: r2(s.phaseTimer), sc: s.score.slice(), c: s.controlled.slice(),
     ch: s.shootCharge.map(r2), ot: s.overtime ? 1 : 0, w: s.winner,
+    st: s.players.map((q) => r2(q.stamina)), ack,
   };
 }
 
@@ -33,7 +34,8 @@ export function decodeSnapshot(o, into = createMatchState()) {
   b.holdTime = o.b[7]; b.lastTeam = o.b[8]; b.passTarget = o.b[9] === -1 ? null : o.b[9];
   into.time = o.t; into.phase = PHASES[o.ph]; into.phaseTimer = o.pt;
   into.score = o.sc.slice(); into.controlled = o.c.slice(); into.shootCharge = o.ch.slice();
-  into.overtime = !!o.ot; into.winner = o.w;
+  into.overtime = !!o.ot; into.winner = o.w; into.ack = o.ack ?? 0;
+  if (o.st) into.players.forEach((q, i) => { q.stamina = o.st[i]; });
   return into;
 }
 
@@ -81,25 +83,33 @@ export class SnapshotBuffer {
 }
 
 /**
- * Guest-side prediction of the locally controlled player.
- * Returns the state with that player (and a held ball) moved to the predicted spot.
+ * Guest-side prediction of the locally controlled player, reconciled against the
+ * host's position at the last input it acknowledged (latest.ack).
  */
 export class Predictor {
-  constructor() { this.p = null; this.id = -1; }
-  apply(state, latest, team, input, dt) {
+  constructor() { this.p = null; this.id = -1; this.hist = []; this.lastAck = 0; }
+  apply(state, latest, team, input, dt, seq = 0) {
     const id = state.controlled[team];
     const auth = latest?.players[id];
-    if (!auth || state.phase !== 'play') { this.p = null; return state; }
-    if (id !== this.id || !this.p) {
-      this.id = id;
-      this.p = { ...auth };
-    }
+    if (!auth || state.phase !== 'play') { this.p = null; this.hist = []; return state; }
+    if (id !== this.id || !this.p) { this.id = id; this.p = { ...auth }; this.hist = []; }
     const p = this.p;
+    // reconcile once per new acknowledgement
+    const ack = latest.ack ?? 0;
+    if (ack > this.lastAck) {
+      this.lastAck = ack;
+      const h = this.hist.find((e) => e.seq === ack);
+      this.hist = this.hist.filter((e) => e.seq > ack);
+      const ref = h ?? { x: p.x, z: p.z };
+      const ex = auth.x - ref.x, ez = auth.z - ref.z;
+      const err = Math.hypot(ex, ez);
+      if (!h || err > 3) { p.x = auth.x; p.z = auth.z; this.hist = []; }
+      else if (err > 0.15) { p.x += ex * 0.5; p.z += ez * 0.5; for (const e of this.hist) { e.x += ex * 0.5; e.z += ez * 0.5; } }
+      p.stamina = auth.stamina ?? p.stamina;
+    }
     const holding = latest.ball.holder === id;
     movePlayer(p, input.mx, input.mz, input.dash, holding && latest.ball.holdTime > C.HOLD_LIMIT, dt);
-    const err = Math.hypot(auth.x - p.x, auth.z - p.z);
-    if (err > 2.5) { p.x = auth.x; p.z = auth.z; }
-    else if (err > 0.8) { const k = Math.min(1, dt / 0.15) * 0.5; p.x += (auth.x - p.x) * k; p.z += (auth.z - p.z) * k; }
+    if (seq) { this.hist.push({ seq, x: p.x, z: p.z }); if (this.hist.length > 240) this.hist.shift(); }
     const q = state.players[id];
     q.x = p.x; q.z = p.z; q.vx = p.vx; q.vz = p.vz; q.facing = p.facing;
     if (state.ball.holder === id) {
@@ -122,7 +132,7 @@ export function createHostSync(conn) {
       const ended = state.phase === 'ended';
       if (acc >= 1 / C.SNAPSHOT_HZ || ended || evs.length) {
         acc = 0;
-        conn.send({ t: 'snap', seq: ++seq, s: encodeSnapshot(state), ev: events });
+        conn.send({ t: 'snap', seq: ++seq, s: encodeSnapshot(state, lastInputSeq), ev: events });
         events = [];
       }
     },
@@ -140,21 +150,24 @@ export function createGuestSync(conn, initial, team = 1) {
     if (m.seq <= lastSnap) return;
     lastSnap = m.seq;
     latest = decodeSnapshot(m.s);
+    lastRecv = now();
     buf.push(latest, now());
     events.push(...m.ev);
   })];
-  let sendAcc = 0;
+  let lastRecv = now();
   return {
     sendInput(inp) {
       pending.pass ||= inp.pass; pending.long ||= inp.long; pending.shootRelease ||= inp.shootRelease;
       conn.send({ t: 'input', seq: ++seq, i: { ...inp, ...pending } });
       pending = { pass: false, long: false, shootRelease: false };
-      sendAcc = 0;
+      return seq;
     },
     update(dt, inp) {
+      // host gone quiet (backgrounded / frozen): treat as a disconnect
+      if (buf.items.length && now() - lastRecv > 3) { conn.drop(); return latest; }
       // the final whistle must never be hidden by the interpolation delay
       if (latest.phase === 'ended' || !buf.items.length) return latest;
-      return pred.apply(buf.sample(now()), buf.latest, team, inp, dt);
+      return pred.apply(buf.sample(now()), buf.latest, team, inp, dt, seq);
     },
     takeEvents() { const e = events; events = []; return e; },
     stop() { offs.forEach((f) => f()); },

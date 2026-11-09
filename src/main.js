@@ -5,6 +5,8 @@ import { loadPlayers } from './render/players.js';
 import { createCamera } from './render/camera.js';
 import { createHud, confetti } from './render/hud.js';
 import { createControls } from './input/controls.js';
+import { PendingInput } from './input/pending.js';
+import { isValidCode } from './net/peer.js';
 import * as screens from './ui/screens.js';
 import * as net from './net/session.js';
 
@@ -48,6 +50,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
   $('controls').classList.remove('hidden');
   let acc = 0;
   let remoteInput = neutral();
+  const localQ = new PendingInput(); // keeps taps from frames that ran no sim step
   let ended = false;
   let display = state;
   let lastPhase = state.phase;
@@ -83,6 +86,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
     frame(dt) {
       if (ended) return display;
       const local = controls.read();
+      localQ.add(local);
       if (role === 'guest') {
         guestSync.sendInput(local);
         display = guestSync.update(dt, local);
@@ -90,10 +94,10 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd }) {
         if (display.phase === 'ended') finish(display.winner);
       } else {
         acc += Math.min(dt, 0.1);
-        let first = true;
+        let first = true, taken = null;
         const evs = [];
         while (acc >= DT) {
-          const li = first ? local : { ...local, pass: false, long: false, shootRelease: false };
+          const li = first ? (taken = localQ.take()) : { ...taken, pass: false, long: false, shootRelease: false };
           const ri = role === 'host' ? (first ? remoteInput : { ...remoteInput, pass: false, long: false, shootRelease: false }) : null;
           step(state, localTeam === 0 ? [li, ri] : [ri, li], DT);
           evs.push(...state.events);
@@ -154,13 +158,18 @@ const app = {
       history.replaceState(null, '', location.pathname);
       app.online(conn, false);
     } catch (e) {
-      history.replaceState(null, '', location.pathname);
-      screens.error(net.errorText(e), () => app.title());
+      // keep ?room= in the URL so reloading retries when the host was not ready yet
+      screens.error(net.errorText(e), () => { history.replaceState(null, '', location.pathname); app.title(); });
     }
   },
   /** isHost: whether this side simulates. Roles swap on every rematch. */
   online(conn, isHost) {
     screens.clear();
+    // leaving the app mid-match (screen lock, app switch) ends the online match for both
+    const onHide = () => { if (document.hidden && !conn.closed) conn.drop(); };
+    document.removeEventListener('visibilitychange', app._onHide ?? onHide);
+    app._onHide = onHide;
+    document.addEventListener('visibilitychange', onHide);
     conn.onClose(() => {
       match?.stop(); match = null;
       screens.error('相手との接続が切れました', () => app.title());
@@ -185,7 +194,7 @@ const app = {
     hud.show(false);
     screens.title({
       onCreate: () => app.create(),
-      onJoin: () => screens.join((code) => app.join(code), () => app.title()),
+      onJoin: () => screens.join((code) => (isValidCode(code) ? app.join(code) : screens.error('部屋が見つかりません。コードを確かめてください', () => app.title())), () => app.title()),
       onCpu: () => app.startCpu(),
     });
   },
@@ -223,7 +232,7 @@ async function boot() {
   views = await loadPlayers(scene, view.players);
   $('loading').classList.add('hidden');
   const code = new URLSearchParams(location.search).get('room');
-  if (code) app.join(code.toUpperCase());
+  if (code && isValidCode(code.toUpperCase())) app.join(code.toUpperCase());
   else app.title();
   requestAnimationFrame(loop);
 }

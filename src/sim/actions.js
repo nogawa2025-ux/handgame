@@ -61,7 +61,7 @@ export function pickLongTarget(s, fromId) {
 function launch(s, from, tx, tz, ty, speed) {
   const b = s.ball;
   b.holder = null; b.holdTime = 0; b.lastTeam = from.team;
-  b.thrower = from.id; b.throwTimer = 0.25;
+  b.thrower = from.id; b.throwTimer = 0.25; b.flightAge = 0;
   b.x = from.x + Math.cos(from.facing) * 0.4; b.z = from.z + Math.sin(from.facing) * 0.4; b.y = 1.1;
   const dx = tx - b.x, dz = tz - b.z;
   const dist = Math.max(0.1, Math.hypot(dx, dz));

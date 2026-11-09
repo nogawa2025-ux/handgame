@@ -48,6 +48,7 @@ export function step(s, inputs, dt) {
     b.vx = h.vx; b.vz = h.vz; b.vy = 0;
   } else {
     if (ballPhysics(s, dt, true)) return;
+    expirePass(b, dt);
     tryCatch(s);
     keeperPickup(s, dt);
   }
@@ -62,6 +63,13 @@ export function step(s, inputs, dt) {
 
   s.time -= dt;
   if (s.time <= 0) endOfTime(s);
+}
+
+/** A pass that missed (too old or rolled to a crawl) becomes a plain loose ball. */
+export function expirePass(b, dt) {
+  if (b.holder !== null || b.passTarget === null) return;
+  b.flightAge = (b.flightAge ?? 0) + dt;
+  if (b.flightAge > 1.5 || Math.hypot(b.vx, b.vz) < 3) b.passTarget = null;
 }
 
 function humanTick(s, t, inp, dt) {
