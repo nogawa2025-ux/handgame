@@ -1,0 +1,111 @@
+:root {
+  --bg: #0d1b2a;
+  --panel: rgba(10, 18, 30, 0.82);
+  --text: #f4f7fb;
+  --muted: #9fb0c3;
+  --accent: #ffd400;
+  --blue: #2a5bd7;
+  --red: #d33a3a;
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  touch-action: none; user-select: none; -webkit-user-select: none; overscroll-behavior: none;
+}
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.hidden { display: none !important; }
+
+/* HUD */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#scoreboard {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  background: var(--panel); padding: 6px 16px; border-radius: 10px; font-weight: 800; font-size: 18px;
+  display: flex; gap: 14px; align-items: center; white-space: nowrap;
+}
+#scoreboard .me { color: #7fa6ff; }
+#scoreboard .op { color: #ff8a8a; }
+#clock { font-variant-numeric: tabular-nums; color: var(--accent); }
+#charge {
+  position: absolute; right: calc(24px + var(--safe-r)); bottom: calc(150px + var(--safe-b)); width: 120px; height: 10px;
+  background: rgba(0,0,0,.5); border-radius: 5px; overflow: hidden; opacity: 0; transition: opacity .1s;
+}
+#charge.on { opacity: 1; }
+#charge-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffd400, #ff3b3b); }
+#banner {
+  position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 56px; font-weight: 900; letter-spacing: .05em; text-shadow: 0 4px 0 rgba(0,0,0,.4), 0 0 24px rgba(0,0,0,.5);
+  animation: pop .5s cubic-bezier(.2,1.6,.4,1);
+}
+#banner.me { color: #ffd400; }
+#banner.op { color: #ff8a8a; }
+@keyframes pop { from { transform: translate(-50%, -50%) scale(.3); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+
+/* Controls */
+#controls { position: fixed; inset: 0; }
+#stick-zone { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; }
+#stick-base {
+  position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  background: rgba(255,255,255,.14); border: 3px solid rgba(255,255,255,.55);
+  left: calc(110px + var(--safe-l)); top: calc(100% - 110px - var(--safe-b));
+}
+#stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  background: rgba(255,255,255,.85);
+}
+.btn {
+  position: absolute; border-radius: 50%; border: 2px solid rgba(255,255,255,.9); color: #fff;
+  font-weight: 800; font-family: inherit; padding: 0; touch-action: none; opacity: .9;
+  text-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+.btn.down { transform: scale(.92); opacity: 1; filter: brightness(1.25); }
+#btn-shoot { width: 84px; height: 84px; right: calc(22px + var(--safe-r)); bottom: calc(26px + var(--safe-b)); background: rgba(229,57,53,.85); font-size: 15px; }
+#btn-pass  { width: 70px; height: 70px; right: calc(118px + var(--safe-r)); bottom: calc(14px + var(--safe-b)); background: rgba(30,136,229,.85); font-size: 15px; }
+#btn-long  { width: 60px; height: 60px; right: calc(112px + var(--safe-r)); bottom: calc(96px + var(--safe-b)); background: rgba(67,160,71,.85); font-size: 13px; }
+#btn-dash  { width: 58px; height: 58px; right: calc(26px + var(--safe-r)); bottom: calc(122px + var(--safe-b)); background: rgba(251,140,0,.85); font-size: 13px; }
+
+/* Overlays / screens */
+.overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(20,40,70,.92), rgba(5,10,20,.97));
+  padding: 16px;
+}
+#screen.clear { background: transparent; pointer-events: none; }
+#screen.clear > * { pointer-events: auto; }
+.panel { text-align: center; max-width: 520px; width: 100%; }
+.title { font-size: 40px; font-weight: 900; margin: 0 0 4px; letter-spacing: .04em; }
+.title span { color: var(--accent); }
+.sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+.menu { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.menu button, .panel button {
+  min-width: 240px; padding: 12px 18px; font-size: 18px; font-weight: 800; border-radius: 12px; border: 0;
+  background: #24364d; color: var(--text); font-family: inherit;
+}
+.menu button.primary, .panel button.primary { background: var(--accent); color: #1a1a1a; }
+.code { font-size: 46px; font-weight: 900; letter-spacing: .25em; color: var(--accent); margin: 6px 0; font-variant-numeric: tabular-nums; }
+.code-input {
+  font-size: 32px; font-weight: 800; letter-spacing: .3em; text-align: center; width: 240px; padding: 8px;
+  border-radius: 10px; border: 2px solid #3b5878; background: #0b1625; color: var(--text); text-transform: uppercase; font-family: inherit;
+}
+.row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+.note { color: var(--muted); font-size: 14px; margin-top: 10px; min-height: 1.2em; }
+.err { color: #ff9a9a; }
+.result { font-size: 72px; font-weight: 900; margin: 0; }
+.result.win { color: var(--accent); text-shadow: 0 0 30px rgba(255,212,0,.6); animation: pop .6s cubic-bezier(.2,1.6,.4,1); }
+.result.lose { color: #9fb0c3; }
+.final { font-size: 28px; font-weight: 800; margin: 4px 0 14px; }
+.countdown { font-size: 120px; font-weight: 900; color: var(--accent); text-shadow: 0 6px 0 rgba(0,0,0,.4); animation: pop .4s; }
+
+.confetti { position: fixed; top: -20px; width: 10px; height: 16px; animation: fall linear forwards; pointer-events: none; }
+@keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+
+#rotate { display: none; z-index: 50; }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+.rotate-box { text-align: center; font-size: 22px; font-weight: 800; }
+.phone-icon { width: 50px; height: 86px; border: 4px solid var(--text); border-radius: 10px; margin: 0 auto 14px; animation: turn 1.6s ease-in-out infinite; }
+@keyframes turn { 50% { transform: rotate(-90deg); } }
+
+#loading { z-index: 40; font-size: 20px; }
