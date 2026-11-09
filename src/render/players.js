@@ -68,7 +68,7 @@ export async function loadPlayers(scene, players) {
   arrow.rotation.x = Math.PI;
   scene.add(ring, arrow);
 
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffa21a, roughness: 0.5 }));
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf2cf14, roughness: 0.55 }));
   ball.castShadow = true;
   scene.add(ball);
   const ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.16, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
