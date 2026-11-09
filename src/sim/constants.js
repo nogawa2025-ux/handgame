@@ -81,6 +81,10 @@ export const C = Object.freeze({
   BODY_R: 0.45,
   CPU_READ: 0.5,           // CPU shooter: chance it shoots away from the keeper's lean
   CPU_WINDUP: 0.5,         // CPU wind-up time (+ up to 0.25s)
+  // 1-on-1
+  CONTACT_R: 0.75,         // a defender this close in front stops the carrier
+  FREE_THROW_AFTER: 1.0,   // held up this long → whistle, free throw
+  READ_V: 1.0,             // lateral speed (m/s) that counts as leaning one way
   // jump shot
   JUMP_TIME: 0.55,
   JUMP_H: 0.6,

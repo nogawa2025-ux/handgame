@@ -297,8 +297,30 @@ export function stepFeint(s, id, dx, dz) {
   const v = C.DASH * C.STEP_BOOST;
   p.vx = (dx / l) * v; p.vz = (dz / l) * v;
   p.facing = Math.atan2(dz, dx);
-  fool(s, p);
   s.events.push('feint');
+  // 1-on-1 read: lateral axis across the attacker's way to goal
+  const ax = goalX(p.team) - p.x, az = -p.z, al = Math.hypot(ax, az) || 1;
+  const latX = -az / al, latZ = ax / al;
+  const esc = Math.sign((dx * latX + dz * latZ)) || 1; // which side the attacker breaks to
+  let read = false, beat = false;
+  for (const q of s.players) {
+    if (q.team === p.team || q.role !== 'field' || q.fooledCd > 0) continue;
+    if (Math.hypot(q.x - p.x, q.z - p.z) > C.FEINT_RANGE) continue;
+    const lean = (q.vx * latX + q.vz * latZ) * esc; // + = already moving to the break side
+    let fooled;
+    if (lean > C.READ_V) fooled = false;               // read it: stays in the way
+    else if (lean < -C.READ_V) fooled = true;          // bit on the first move
+    else fooled = roll(s, q.id + 61) < 0.5;            // waited: a coin flip
+    if (fooled) {
+      q.stun = C.FEINT_STUN * (lean < -C.READ_V ? 1.3 : 1); q.fooledCd = C.FEINT_IMMUNE; q.vx *= 0.3; q.vz *= 0.3;
+      beat = true;
+    } else {
+      q.fooledCd = C.FEINT_IMMUNE;
+      read = true;
+    }
+  }
+  if (read && !beat) { p.vx *= 0.35; p.vz *= 0.35; s.events.push('read'); } // the burst runs into the defender
+  else if (beat) s.events.push('beat');
 }
 
 

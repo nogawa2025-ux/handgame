@@ -84,6 +84,7 @@ function runMatch({ role, conn = null, localTeam = 0, onEnd, tutorial = null }) 
       else if (e === 'steal' || e === 'intercept') { /* subtle: no banner */ }
       else if (e === 'overtime') hud.flash('延長戦！', true, 2);
       else if (e === 'block') hud.flash('ブロック！', false, 0.8, true);
+      else if (e.startsWith('freethrow:')) hud.flash('フリースロー（止められた）', Number(e.slice(10)) !== localTeam, 1.2, true);
       else if (e.startsWith('seven:')) {
         const mine = Number(e.slice(6)) === localTeam;
         hud.flash(mine ? '7mスロー！（後ろからのファウル）' : '7mスロー（相手）：後ろから行くとファウル', mine, 2, true);

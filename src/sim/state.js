@@ -63,6 +63,6 @@ export function giveBall(s, id) {
   const b = s.ball;
   b.holder = id; b.holdTime = 0; b.lastTeam = p.team; b.passTarget = null;
   b.shot = false; b.shotTeam = null;
-  p.feinted = false; p.shotFeinted = false; p.windup = 0;
+  p.feinted = false; p.shotFeinted = false; p.windup = 0; p.oo = null; p.contact = 0;
   b.x = p.x; b.z = p.z; b.y = 1; b.vx = b.vy = b.vz = 0;
 }

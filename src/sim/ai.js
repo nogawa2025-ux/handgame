@@ -89,15 +89,30 @@ function carrier(s, p, dt) {
     p.windup = 1e-3; // start the wind-up (the keeper gets to read it)
     return;
   }
-  // under pressure from a marker who hasn't been fooled yet: try a step feint first
-  if (threat < 1.7 && b.holdTime > 0.3 && b.holdTime < 1.6 && !p.feinted) {
-    const m = s.players.find((q) => q.team !== p.team && q.role === 'field' && q.fooledCd <= 0 && Math.hypot(q.x - p.x, q.z - p.z) < 1.7);
-    if (m) {
-      const side = (p.z - m.z) >= 0 ? 1 : -1;
-      stepFeint(s, p.id, d * 0.4, side * Math.min(1, (C.COURT_HALF_Z - Math.abs(p.z)) / 2));
-      p.feinted = true;
+  // 1-on-1 against a marker in front: show one way, then break the other (or just go)
+  if (!p.feinted && b.holdTime > 0.25) {
+    const m = s.players.find((q) => q.team !== p.team && q.role === 'field' && q.stun <= 0 && (q.x - p.x) * d > 0 && Math.hypot(q.x - p.x, q.z - p.z) < 2.2);
+    if (m || p.oo) {
+      const roomL = C.COURT_HALF_Z - 1 - p.z, roomR = C.COURT_HALF_Z - 1 + p.z;
+      p.oo ??= { t: 0, side: roll(s, p.id + 41) < 0.5 ? -1 : 1, fake: roll(s, p.id + 43) < 0.7 };
+      if (p.oo.side > 0 && roomL < 1) p.oo.side = -1; else if (p.oo.side < 0 && roomR < 1) p.oo.side = 1;
+      p.oo.t += dt;
+      if (p.oo.t < 0.35) {
+        // the set-up: drift toward the fake side (a mirroring marker follows)
+        movePlayer(p, d * 0.3, p.oo.side * (p.oo.fake ? 1 : -1), true, false, dt, C.AI_RUN);
+        return;
+      }
+      const go = p.oo.fake ? -p.oo.side : p.oo.side;
+      if (p.oo.fake) stepFeint(s, p.id, d * 0.45, go);
+      else movePlayer(p, d * 0.45, go, true, false, dt, C.AI_RUN);
+      p.feinted = true; p.oo = null;
       return;
     }
+  }
+  // held up by a defender: move the ball on
+  if (p.contact > 0.35 && b.holdTime > 0.4) {
+    const best = bestPassTarget(s, p.id);
+    if (best !== null) { throwBall(s, p.id, best, C.PASS_SPEED); return; }
   }
   if ((threat < 1.7 && b.holdTime > 0.5) || b.holdTime > (ready ? 2.6 : 1.1)) {
     const best = bestPassTarget(s, p.id);
@@ -213,8 +228,19 @@ export function aiTick(s, team, dt, cpuControlsAll) {
       const ul = Math.hypot(ux, uz) || 1;
       // step out and close the shooter down; sprint if far off
       const far = Math.hypot(h.x - p.x, h.z - p.z) > 2;
-      if (far && p.stun <= 0) { const tx = h.x + (ux / ul) * 1.0 - p.x, tz = h.z + (uz / ul) * 1.0 - p.z, l = Math.hypot(tx, tz); movePlayer(p, tx / l, tz / l, p.stamina > 0.2, false, dt, C.RUN); }
-      else moveTo(p, h.x + (ux / ul) * 1.0, h.z + (uz / ul) * 1.0, dt, false, 1);
+      // 1-on-1 style for this carrier: mirror (follows every move), wait (holds ground) or anticipate
+      if (!p.dplan || p.dplan.h !== h.id) {
+        const r = roll(s, p.id + 47);
+        p.dplan = { h: h.id, kind: r < 0.5 ? 'mirror' : r < 0.75 ? 'wait' : 'read' };
+      }
+      let tx = h.x + (ux / ul) * 0.9, tz = h.z + (uz / ul) * 0.9;
+      if (p.dplan.kind === 'read') {
+        // step toward where a fake would break: against the carrier's current drift
+        const lx = -uz / ul, lz = ux / ul, hv = h.vx * lx + h.vz * lz;
+        if (Math.abs(hv) > 1) { tx -= lx * Math.sign(hv) * 1.0; tz -= lz * Math.sign(hv) * 1.0; }
+      }
+      if (far && p.stun <= 0) { const ex = tx - p.x, ez = tz - p.z, l = Math.hypot(ex, ez); movePlayer(p, ex / l, ez / l, p.stamina > 0.2, false, dt, C.RUN); }
+      else moveTo(p, tx, tz, dt, false, p.dplan.kind === 'wait' ? 0.4 : 1);
       p.facing = Math.atan2(h.z - p.z, h.x - p.x);
       // arms up in the lane against a wind-up; otherwise poke at the ball now and then
       if (s.shootCharge[h.team] <= 0 && b.holdTime > 0.6) trySteal(s, id);

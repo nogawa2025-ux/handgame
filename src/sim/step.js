@@ -1,5 +1,5 @@
 import { C } from './constants.js';
-import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea } from './geometry.js';
+import { checkGoal, checkOut, inGoalArea, clampOutOfGoalArea, goalX } from './geometry.js';
 import { resetForThrowOff, giveBall, gkId, attackDir } from './state.js';
 import { movePlayer, pickPassTarget, pickLongTarget, throwBall, shoot, tryCatch, trySteal, nearestToBall, shotFeint, stepFeint, substitute, tryBlock, bestPassTarget, stealChance, fromBehind, roll } from './actions.js';
 import { aiTick } from './ai.js';
@@ -51,6 +51,7 @@ export function step(s, inputs, dt) {
   for (const t of [0, 1]) humanTick(s, t, inputs[t], dt);
   for (const t of [0, 1]) aiTick(s, t, dt, inputs[t] == null);
   duelTick(s, inputs, dt);
+  if (bodyContact(s, dt)) return;
   for (const p of s.players) {
     p.stealCd = Math.max(0, p.stealCd - dt);
     p.stun = Math.max(0, (p.stun ?? 0) - dt);
@@ -221,6 +222,55 @@ function sevenMeterTick(s, inputs, dt) {
     shoot(s, sh.id, aim.z, Math.max(0.6, s.shootCharge[pen.team]), aim.h);
     s.shootCharge[pen.team] = 0;
   }
+}
+
+/**
+ * 1-on-1 contact: a defender squarely in front of the carrier stops them (you can't
+ * run through a set defender). Held up for too long → whistle, free throw.
+ * Returns true if play was stopped.
+ */
+function bodyContact(s, dt) {
+  const b = s.ball;
+  if (b.holder === null || s.penalty) return false;
+  const h = s.players[b.holder];
+  if (h.role !== 'field' || h.jump > 0) { h.contact = 0; return false; }
+  const ax = goalX(h.team) - h.x, az = -h.z, al = Math.hypot(ax, az) || 1;
+  let blocked = false;
+  for (const q of s.players) {
+    if (q.team === h.team || q.role !== 'field' || q.stun > 0) continue;
+    const dx = q.x - h.x, dz = q.z - h.z, d = Math.hypot(dx, dz);
+    if (d >= C.CONTACT_R || d < 1e-6) continue;
+    if ((dx * ax + dz * az) / (d * al) < 0.3) continue; // not between the carrier and the goal
+    blocked = true;
+    const nx = dx / d, nz = dz / d;
+    h.x = q.x - nx * C.CONTACT_R; h.z = q.z - nz * C.CONTACT_R;
+    const into = h.vx * nx + h.vz * nz;
+    if (into > 0) { h.vx -= into * nx; h.vz -= into * nz; }
+    h.vx *= 0.6; h.vz *= 0.6;
+  }
+  h.contact = blocked ? (h.contact ?? 0) + dt : Math.max(0, (h.contact ?? 0) - dt * 2);
+  if (h.contact >= C.FREE_THROW_AFTER && !(s.shootCharge[h.team] > 0)) { freeThrow(s, h); return true; }
+  return false;
+}
+
+/** Free throw for the stopped attacker: from outside the 9m line, defenders 3m away. */
+function freeThrow(s, h) {
+  h.contact = 0;
+  const gx = goalX(h.team), R = C.FREE_THROW_R + 0.3;
+  if (Math.hypot(gx - h.x, h.z) < R) {
+    const a = Math.atan2(h.z, h.x - gx);
+    h.x = gx + Math.cos(a) * R; h.z = Math.max(-9.7, Math.min(9.7, Math.sin(a) * R));
+  }
+  h.vx = h.vz = 0;
+  for (const q of s.players) {
+    if (q.team === h.team || q.role !== 'field') continue;
+    const dx = q.x - h.x, dz = q.z - h.z, d = Math.hypot(dx, dz) || 1;
+    if (d < 3) { q.x = h.x + (dx / d) * 3; q.z = Math.max(-9.7, Math.min(9.7, h.z + (dz / d) * 3)); clampOutOfGoalArea(q); }
+    q.vx = q.vz = 0;
+  }
+  giveBall(s, h.id);
+  s.events.push('freethrow:' + h.team);
+  setRestart(s);
 }
 
 /** Easy defence: keep control on the defender nearest the ball (with a little hysteresis). */
