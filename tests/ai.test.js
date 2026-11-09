@@ -60,7 +60,7 @@ function freeShot(x, z, aim, frames) {
   for (let i = 0; i < 40; i++) { step(s, [idle(), idle()], DT); hold(); }
   for (let i = 0; i < frames; i++) { step(s, [{ ...idle(), shootHeld: true }, idle()], DT); hold(); }
   step(s, [{ ...idle(), shootRelease: true, mz: aim }, idle()], DT);
-  for (let i = 0; i < 90; i++) { step(s, [idle(), idle()], DT); hold(); if (s.score[0] || s.events.includes('save')) break; }
+  for (let i = 0; i < 150; i++) { step(s, [idle(), idle()], DT); hold(); if (s.score[0] || s.events.includes('save')) break; }
   return s.score[0] ? 'goal' : s.events.includes('save') ? 'save' : 'miss';
 }
 const rate = (frames) => {
@@ -76,4 +76,15 @@ test('keeper is realistic: full-power corner shots from distance score roughly 3
 
 test('keeper saves most half-power shots', () => {
   assert.ok(rate(24) <= 0.35);
+});
+
+test('shots from absurd distances do not go in', () => {
+  let own = 0, long = 0, n = 0;
+  for (const aim of [-1, -0.5, 0.5, 1]) for (const f of [30, 48]) {
+    n++;
+    for (const [x, z] of [[-5, 0], [-10, 3]]) if (freeShot(x, z, aim, f) === 'goal') own++;
+    for (const [x, z] of [[0, 0], [2, 5], [4, -5]]) if (freeShot(x, z, aim, f) === 'goal') long++;
+  }
+  assert.equal(own, 0, 'from your own half');
+  assert.ok(long / (n * 3) <= 0.15, `16–20m goal rate ${long / (n * 3)}`);
 });

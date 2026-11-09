@@ -111,8 +111,10 @@ function keeper(s, team, dt, cpu) {
     if ((b.x - gk.x) * Math.sign(own) >= 0 && Math.abs(b.x - gk.x) < 0.6 && b.y < 2.4) {
       // a keeper wrong-footed by a shot feint can barely reach the other side
       const wrongSide = gk.offBalance > 0 && Math.sign(b.z - gk.z) !== Math.sign(gk.lean);
-      const cap = wrongSide ? 0.45 : C.GK_REACH;
-      const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE);
+      // on a long flight the keeper also shuffles across before diving, so distance shots get covered
+      const shuffle = Math.max(0, b.shotAge - 0.7) * C.GK_SPEED;
+      const cap = (wrongSide ? 0.45 : C.GK_REACH) + shuffle;
+      const reach = Math.min(cap, 0.5 + Math.max(0, b.shotAge - C.GK_REACT) * C.GK_DIVE + shuffle);
       if (Math.abs(b.z - gk.z) <= reach) {
         giveBall(s, gk.id);
         s.gkTimer[team] = 0;

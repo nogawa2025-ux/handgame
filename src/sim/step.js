@@ -178,7 +178,7 @@ function ballPhysics(s, dt, rules) {
     const f = Math.max(0, 1 - 1.2 * dt);
     b.vx *= f; b.vz *= f;
   }
-  if (b.shot && b.shotAge > 1.2) b.shot = false;
+  if (b.shot && Math.hypot(b.vx, b.vz) < 4) b.shot = false; // a shot stays a shot until it dies
   if (!rules) {
     // during the goal celebration keep the ball in the net
     if (Math.abs(b.x) > 21) { b.x = Math.sign(b.x) * 21; b.vx = 0; }
