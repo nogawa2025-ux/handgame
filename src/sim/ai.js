@@ -110,7 +110,10 @@ function carrier(s, p, dt) {
     }
   }
   // held up by a defender: move the ball on
-  if (p.contact > 0.35 && b.holdTime > 0.4) {
+  // (decided once per hold-up: sometimes it keeps driving and takes the free throw)
+  if (!(p.contact > 0)) p.heldPass = null;
+  else if (p.heldPass == null) p.heldPass = roll(s, 41 + p.id) < 0.55;
+  if (p.heldPass && p.contact > 0.35 && b.holdTime > 0.4) {
     const best = bestPassTarget(s, p.id);
     if (best !== null) { throwBall(s, p.id, best, C.PASS_SPEED); return; }
   }
@@ -243,7 +246,7 @@ export function aiTick(s, team, dt, cpuControlsAll) {
       else moveTo(p, tx, tz, dt, false, p.dplan.kind === 'wait' ? 0.4 : 1);
       p.facing = Math.atan2(h.z - p.z, h.x - p.x);
       // arms up in the lane against a wind-up; otherwise poke at the ball now and then
-      if (s.shootCharge[h.team] <= 0 && b.holdTime > 0.6) trySteal(s, id);
+      if (s.shootCharge[h.team] <= 0 && b.holdTime > 0.6 && !(h.contact > 0.1)) trySteal(s, id);
       return;
     }
     const [zx, zz] = zoneSpot(s, team, i);

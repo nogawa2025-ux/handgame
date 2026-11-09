@@ -62,3 +62,30 @@ test('CPU carriers play 1-on-1s: fakes and breaks happen in a match', () => {
   }
   assert.ok(c.beat > 3 && c.read > 1, JSON.stringify(c));
 });
+
+test('easy defender holding the carrier up gets the free throw (no auto-cut while in contact)', () => {
+  const s = duel();
+  Object.assign(s.players[1], { x: 12, z: 0, contact: 0.1 }); Object.assign(s.players[8], { x: 12.8, z: 0, facing: Math.PI });
+  s.controlled[1] = 8;
+  const evs = [];
+  for (let i = 0; i < 150; i++) {
+    step(s, [{ ...idle(), mx: 1, easy: true }, { ...idle(), mx: -1, easy: true }], DT);
+    evs.push(...s.events); if (evs.some((e) => e.startsWith('freethrow'))) break;
+  }
+  assert.ok(!evs.includes('steal'), 'no cut while holding');
+  assert.ok(evs.includes('freethrow:0'), 'free throw: ' + evs.join(','));
+});
+
+test('a CPU marker holding a human carrier up does not keep poking (free throw comes)', () => {
+  let free = 0;
+  for (let k = 0; k < 6; k++) {
+    const s = duel(); s.time -= k * 0.37;
+    Object.assign(s.players[1], { x: 12, z: 0, contact: 0.1 }); Object.assign(s.players[8], { x: 12.8, z: 0, facing: Math.PI });
+    for (let i = 0; i < 180; i++) {
+      step(s, [{ ...idle(), mx: 1 }, null], DT);
+      if (s.events.some((e) => e.startsWith('freethrow'))) { free++; break; }
+      if (s.ball.holder !== 1) break;
+    }
+  }
+  assert.ok(free >= 3, `free throws ${free}/6`);
+});

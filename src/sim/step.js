@@ -248,7 +248,8 @@ function bodyContact(s, dt) {
     if (into > 0) { h.vx -= into * nx; h.vz -= into * nz; }
     h.vx *= 0.6; h.vz *= 0.6;
   }
-  h.contact = blocked ? (h.contact ?? 0) + dt : Math.max(0, (h.contact ?? 0) - dt * 2);
+  // a brief separation (a shuffle, a stumble) doesn't reset the count
+  h.contact = blocked ? (h.contact ?? 0) + dt : Math.max(0, (h.contact ?? 0) - dt * 0.5);
   if (h.contact >= C.FREE_THROW_AFTER && !(s.shootCharge[h.team] > 0)) { freeThrow(s, h); return true; }
   return false;
 }
@@ -288,6 +289,7 @@ function autoCut(s, t, me, inp) {
   if (b.holder === null || me.stealCd > 0 || me.stun > 0) return;
   const h = s.players[b.holder];
   if (h.team === t) return;
+  if (h.contact > 0) return; // already holding them up: keep blocking (that earns the free throw)
   const dx = h.x - me.x, dz = h.z - me.z, l = Math.hypot(dx, dz), m = Math.hypot(inp.mx, inp.mz);
   if (m < 0.3 || (inp.mx * dx + inp.mz * dz) / (m * l || 1) < 0.5) return;
   if (fromBehind(me, h)) return; // never hack from behind (that would give away a 7m throw)
